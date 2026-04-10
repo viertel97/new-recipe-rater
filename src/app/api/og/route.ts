@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { extractMeta, extractTitleTag } from "@/lib/og";
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams.get("url");
@@ -26,19 +27,4 @@ export async function GET(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Failed to fetch metadata" }, { status: 500 });
   }
-}
-
-function extractMeta(html: string, property: string): string | null {
-  // Match both property="..." and name="..." attributes
-  const regex = new RegExp(
-    `<meta\\s+(?:[^>]*?)(?:property|name)=["']${property}["'][^>]*?content=["']([^"']*?)["']|<meta\\s+(?:[^>]*?)content=["']([^"']*?)["'][^>]*?(?:property|name)=["']${property}["']`,
-    "i"
-  );
-  const match = html.match(regex);
-  return match ? (match[1] || match[2] || null) : null;
-}
-
-function extractTitleTag(html: string): string | null {
-  const match = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  return match ? match[1].trim() : null;
 }

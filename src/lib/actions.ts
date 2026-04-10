@@ -6,6 +6,23 @@ import { submitLinkSchema, rateLinkSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { Rating, Urgency } from "@/generated/prisma/client";
 
+const SOCIAL_MEDIA_DOMAINS = new Set([
+  "instagram.com",
+  "www.instagram.com",
+  "tiktok.com",
+  "www.tiktok.com",
+  "vm.tiktok.com",
+]);
+
+function isSocialMediaUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return SOCIAL_MEDIA_DOMAINS.has(hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function submitLink(formData: FormData) {
   const session = await auth();
   if (!session?.user) return { error: "Not authenticated" };
@@ -38,7 +55,10 @@ export async function submitLink(formData: FormData) {
   return { success: true };
 }
 
-export async function importToTandoor(linkId: string) {
+export async function importToTandoor(
+  linkId: string,
+  scraped?: { description: string; imageURL?: string }
+) {
   const session = await auth();
   if (!session?.user) return { error: "Not authenticated" };
 
@@ -50,10 +70,93 @@ export async function importToTandoor(linkId: string) {
   const tandoorToken = process.env.TANDOOR_TOKEN;
   if (!tandoorUrl || !tandoorToken) return { error: "Tandoor is not configured" };
 
-  // Fetch the recipe page HTML
+  if (isSocialMediaUrl(link.url) && scraped?.description) {
+    return importSocialMediaToTandoor(scraped, tandoorUrl, tandoorToken);
+  } else {
+    return importBookmarkletToTandoor(link.url, tandoorUrl, tandoorToken);
+  }
+}
+
+async function importSocialMediaToTandoor(
+  scraped: { description: string; imageURL?: string },
+  tandoorUrl: string,
+  tandoorToken: string
+) {
+  if (scraped.description.length < 3) {
+    return { error: "Could not extract post content" };
+  }
+
+  // Download cover image if available
+  let imageBlob: Blob | null = null;
+  if (scraped.imageURL) {
+    try {
+      const imgRes = await fetch(scraped.imageURL, { signal: AbortSignal.timeout(10000) });
+      if (imgRes.ok) {
+        imageBlob = await imgRes.blob();
+      }
+    } catch {
+      // Proceed without image
+    }
+  }
+
+  // Send to Tandoor AI import
+  try {
+    const formData = new FormData();
+    formData.append("recipe_id", "");
+    formData.append("text", scraped.description);
+
+    if (imageBlob) {
+      formData.append("file", imageBlob, "cover.jpg");
+    } else {
+      formData.append("file", "");
+    }
+
+    const aiProviderId = process.env.TANDOOR_AI_PROVIDER_ID;
+    if (aiProviderId) {
+      formData.append("ai_provider_id", aiProviderId);
+    }
+
+    const res = await fetch(`${tandoorUrl}/api/ai-import/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tandoorToken}`,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      return { error: `Tandoor AI import failed (${res.status}): ${text}` };
+    }
+
+    const data = await res.json();
+
+    if (data.error) {
+      return { error: data.msg || "Tandoor AI import failed" };
+    }
+
+    const recipeId = data.recipe_id ?? data.recipe?.id;
+    if (recipeId) {
+      return {
+        success: true,
+        importUrl: `${tandoorUrl}/view/recipe/${recipeId}`,
+      };
+    }
+
+    return { success: true, importUrl: tandoorUrl };
+  } catch {
+    return { error: "Failed to connect to Tandoor" };
+  }
+}
+
+async function importBookmarkletToTandoor(
+  url: string,
+  tandoorUrl: string,
+  tandoorToken: string
+) {
   let html: string;
   try {
-    const res = await fetch(link.url, {
+    const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; InstaRater/1.0)" },
     });
     html = await res.text();
@@ -61,7 +164,6 @@ export async function importToTandoor(linkId: string) {
     return { error: "Failed to fetch recipe page" };
   }
 
-  // Send to Tandoor bookmarklet-import API
   try {
     const res = await fetch(`${tandoorUrl}/api/bookmarklet-import/`, {
       method: "POST",
@@ -69,7 +171,7 @@ export async function importToTandoor(linkId: string) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${tandoorToken}`,
       },
-      body: JSON.stringify({ url: link.url, html }),
+      body: JSON.stringify({ url, html }),
     });
 
     if (res.status !== 201) {
