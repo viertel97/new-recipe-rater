@@ -150,7 +150,7 @@ async function importSocialMediaToTandoor(
     const recipePayload = {
       ...aiData.recipe,
       source_url: url,
-      image: scraped.imageURL || "",
+      servings: aiData.recipe.servings ?? 1,
     };
 
     const createRes = await fetch(`${tandoorUrl}/api/recipe/`, {
@@ -172,6 +172,28 @@ async function importSocialMediaToTandoor(
 
     if (!createRes.ok) {
       return { error: `Failed to create recipe (${createRes.status}): ${JSON.stringify(createdRecipe).substring(0, 200)}` };
+    }
+
+    // Step 3: Upload recipe image via PUT /api/recipe/{id}/image/ (like kitshn does)
+    if (scraped.imageURL) {
+      try {
+        const imageForm = new FormData();
+        imageForm.append("image_url", scraped.imageURL);
+
+        const imgRes = await fetch(`${tandoorUrl}/api/recipe/${createdRecipe.id}/image/`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${tandoorToken}`,
+          },
+          body: imageForm,
+        });
+
+        console.log("[importSocialMedia] Image upload response:", {
+          status: imgRes.status,
+        });
+      } catch (imgErr) {
+        console.error("[importSocialMedia] Image upload failed (non-fatal):", imgErr);
+      }
     }
 
     return {
