@@ -27,98 +27,6 @@ function isInstagramUrl(url: string): boolean {
   return /instagram\.com\/(p|reel|reels|tv)\//.test(url);
 }
 
-const SOCIAL_MEDIA_HOSTS = new Set([
-  "instagram.com",
-  "www.instagram.com",
-  "tiktok.com",
-  "www.tiktok.com",
-  "vm.tiktok.com",
-]);
-
-function isSocialMediaUrl(url: string): boolean {
-  try {
-    return SOCIAL_MEDIA_HOSTS.has(new URL(url).hostname);
-  } catch {
-    return false;
-  }
-}
-
-function CaptionModal({
-  onSubmit,
-  onClose,
-}: {
-  onSubmit: (caption: string) => void;
-  onClose: () => void;
-}) {
-  const [caption, setCaption] = useState("");
-
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      <div
-        className="relative w-full max-w-md animate-fade-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="rounded-xl overflow-hidden bg-background border border-border/50 p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold">Import from Social Media</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Paste the post caption below. Open the post, tap &ldquo;...&rdquo; &rarr; &ldquo;Copy text&rdquo; to get it.
-            </p>
-          </div>
-          <textarea
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder="Paste caption here..."
-            rows={8}
-            autoFocus
-            className="w-full bg-background/40 border border-border/50 rounded-lg px-3 py-2
-              text-xs text-foreground placeholder:text-muted-foreground/50
-              focus:outline-none focus:border-border resize-none transition-colors"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                if (caption.trim().length > 2) onSubmit(caption.trim());
-              }}
-              disabled={caption.trim().length < 3}
-              className="flex-1 px-3 py-2 rounded-lg text-xs font-medium tracking-wide
-                border border-blue-500/30 bg-blue-500/10 text-blue-400
-                hover:bg-blue-500/20 transition-all duration-200
-                disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Import
-            </button>
-            <button
-              onClick={onClose}
-              className="px-3 py-2 rounded-lg text-xs font-medium tracking-wide
-                border border-border/40 text-muted-foreground/60
-                hover:text-muted-foreground transition-all duration-200"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
 
 type OgData = { title: string | null; image: string | null; description: string | null; siteName: string | null };
 
@@ -355,9 +263,7 @@ export function LinkCard({ link, canReview }: { link: LinkItem; canReview: boole
   const [reviewNote, setReviewNote] = useState(link.reviewNote ?? "");
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [captionModalOpen, setCaptionModalOpen] = useState(false);
   const isInsta = isInstagramUrl(link.url);
-  const isSocial = isSocialMediaUrl(link.url);
   const postId = isInsta ? getPostId(link.url) : null;
   const closeModal = useCallback(() => setModalOpen(false), []);
 
@@ -374,29 +280,17 @@ export function LinkCard({ link, canReview }: { link: LinkItem; canReview: boole
     });
   }
 
-  function handleImportToTandoor() {
-    if (isSocial) {
-      setCaptionModalOpen(true);
-    } else {
-      doImport();
-    }
-  }
-
-  async function doImport(scraped?: { description: string; imageURL?: string }) {
+  async function handleImportToTandoor() {
     setImporting(true);
-    setImportStatus("Importing to Tandoor...");
-
-    try {
-      const result = await importToTandoor(link.id, scraped);
-      if (result.error) {
-        setImportStatus(result.error);
-      } else if (result.importUrl) {
-        window.open(result.importUrl, "_blank");
-        setImportStatus("Sent to Tandoor");
-      }
-    } finally {
-      setImporting(false);
+    setImportStatus(null);
+    const result = await importToTandoor(link.id);
+    if (result.error) {
+      setImportStatus(result.error);
+    } else if (result.importUrl) {
+      window.open(result.importUrl, "_blank");
+      setImportStatus("Sent to Tandoor");
     }
+    setImporting(false);
   }
 
   return (
@@ -590,7 +484,7 @@ export function LinkCard({ link, canReview }: { link: LinkItem; canReview: boole
                 hover:bg-blue-500/20 transition-all duration-200
                 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {importing ? "Importing..." : isSocial ? "Import from Social Media" : "Import to Tandoor"}
+              {importing ? "Importing..." : "Import to Tandoor"}
             </button>
             {importStatus && (
               <p className={`text-[11px] mt-1.5 ${importStatus.startsWith("Sent") ? "text-green-400" : "text-red-400"}`}>
@@ -600,15 +494,6 @@ export function LinkCard({ link, canReview }: { link: LinkItem; canReview: boole
           </div>
         )}
 
-        {captionModalOpen && (
-          <CaptionModal
-            onClose={() => setCaptionModalOpen(false)}
-            onSubmit={(caption) => {
-              setCaptionModalOpen(false);
-              doImport({ description: caption });
-            }}
-          />
-        )}
       </div>
     </div>
   );

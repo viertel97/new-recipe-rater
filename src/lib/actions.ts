@@ -55,10 +55,7 @@ export async function submitLink(formData: FormData) {
   return { success: true };
 }
 
-export async function importToTandoor(
-  linkId: string,
-  scraped?: { description: string; imageURL?: string }
-) {
+export async function importToTandoor(linkId: string) {
   const session = await auth();
   if (!session?.user) return { error: "Not authenticated" };
 
@@ -70,48 +67,59 @@ export async function importToTandoor(
   const tandoorToken = process.env.TANDOOR_TOKEN;
   if (!tandoorUrl || !tandoorToken) return { error: "Tandoor is not configured" };
 
-  if (isSocialMediaUrl(link.url) && scraped?.description) {
-    return importSocialMediaToTandoor(scraped, tandoorUrl, tandoorToken);
+  if (isSocialMediaUrl(link.url)) {
+    return importSocialMediaToTandoor(link.url, tandoorUrl, tandoorToken);
   } else {
     return importBookmarkletToTandoor(link.url, tandoorUrl, tandoorToken);
   }
 }
 
 async function importSocialMediaToTandoor(
-  scraped: { description: string; imageURL?: string },
+  url: string,
   tandoorUrl: string,
   tandoorToken: string
 ) {
-  if (scraped.description.length < 3) {
+  // Scrape the post using a headless browser (like kitshn's WebView)
+  const { scrapeSocialMediaPost } = await import("@/lib/scrape-social");
+  const scraped = await scrapeSocialMediaPost(url);
+
+  console.log("[importSocialMedia] Scraped result:", {
+    description: scraped.description?.substring(0, 100),
+    imageURL: scraped.imageURL?.substring(0, 100),
+  });
+
+  if (!scraped.description || scraped.description.length < 3) {
     return { error: "Could not extract post content" };
   }
 
-  // Download cover image if available
-  let imageBlob: Blob | null = null;
-  if (scraped.imageURL) {
-    try {
-      const imgRes = await fetch(scraped.imageURL, { signal: AbortSignal.timeout(10000) });
-      if (imgRes.ok) {
-        imageBlob = await imgRes.blob();
-      }
-    } catch {
-      // Proceed without image
+  // Clean up OG description: strip the "X likes, Y comments - user on date: " prefix
+  let recipeText = scraped.description;
+  const quoteStart = recipeText.indexOf(':\u00A0"');
+  if (quoteStart === -1) {
+    const altStart = recipeText.indexOf(': "');
+    if (altStart !== -1 && altStart < 200) {
+      recipeText = recipeText.substring(altStart + 3);
     }
+  } else {
+    recipeText = recipeText.substring(quoteStart + 3);
   }
+  // Remove trailing quote and period if present
+  recipeText = recipeText.replace(/"\.\s*$/, "").trim();
 
   // Send to Tandoor AI import
   try {
+    const aiProviderId = process.env.TANDOOR_AI_PROVIDER_ID;
+
+    console.log("[importSocialMedia] Sending to Tandoor:", {
+      textLength: recipeText.length,
+      textPreview: recipeText.substring(0, 200),
+      aiProviderId: aiProviderId || "default",
+    });
+
     const formData = new FormData();
     formData.append("recipe_id", "");
-    formData.append("text", scraped.description);
-
-    if (imageBlob) {
-      formData.append("file", imageBlob, "cover.jpg");
-    } else {
-      formData.append("file", "");
-    }
-
-    const aiProviderId = process.env.TANDOOR_AI_PROVIDER_ID;
+    formData.append("text", recipeText);
+    formData.append("file", new Blob([]), "");
     if (aiProviderId) {
       formData.append("ai_provider_id", aiProviderId);
     }
@@ -124,27 +132,54 @@ async function importSocialMediaToTandoor(
       body: formData,
     });
 
-    if (!res.ok) {
-      const text = await res.text();
-      return { error: `Tandoor AI import failed (${res.status}): ${text}` };
+    const aiData = await res.json();
+
+    console.log("[importSocialMedia] AI parse response:", {
+      status: res.status,
+      error: aiData.error,
+      recipeName: aiData.recipe?.name,
+      stepsCount: aiData.recipe?.steps?.length,
+      msg: aiData.msg?.substring(0, 200),
+    });
+
+    if (!res.ok || aiData.error || !aiData.recipe) {
+      return { error: aiData.msg || `Tandoor AI import failed (${res.status})` };
     }
 
-    const data = await res.json();
+    // Step 2: Create the recipe in Tandoor (ai-import only parses, doesn't save)
+    const recipePayload = {
+      ...aiData.recipe,
+      source_url: url,
+      image: scraped.imageURL || "",
+    };
 
-    if (data.error) {
-      return { error: data.msg || "Tandoor AI import failed" };
+    const createRes = await fetch(`${tandoorUrl}/api/recipe/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tandoorToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(recipePayload),
+    });
+
+    const createdRecipe = await createRes.json();
+
+    console.log("[importSocialMedia] Recipe create response:", {
+      status: createRes.status,
+      id: createdRecipe.id,
+      name: createdRecipe.name,
+    });
+
+    if (!createRes.ok) {
+      return { error: `Failed to create recipe (${createRes.status}): ${JSON.stringify(createdRecipe).substring(0, 200)}` };
     }
 
-    const recipeId = data.recipe_id ?? data.recipe?.id;
-    if (recipeId) {
-      return {
-        success: true,
-        importUrl: `${tandoorUrl}/view/recipe/${recipeId}`,
-      };
-    }
-
-    return { success: true, importUrl: tandoorUrl };
-  } catch {
+    return {
+      success: true,
+      importUrl: `${tandoorUrl}/view/recipe/${createdRecipe.id}`,
+    };
+  } catch (e) {
+    console.error("[importSocialMedia] Error:", e);
     return { error: "Failed to connect to Tandoor" };
   }
 }
