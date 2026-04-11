@@ -68,13 +68,14 @@ export async function importToTandoor(linkId: string) {
   if (!tandoorUrl || !tandoorToken) return { error: "Tandoor is not configured" };
 
   if (isSocialMediaUrl(link.url)) {
-    return importSocialMediaToTandoor(link.url, tandoorUrl, tandoorToken);
+    return importSocialMediaToTandoor(linkId, link.url, tandoorUrl, tandoorToken);
   } else {
-    return importBookmarkletToTandoor(link.url, tandoorUrl, tandoorToken);
+    return importBookmarkletToTandoor(linkId, link.url, tandoorUrl, tandoorToken);
   }
 }
 
 async function importSocialMediaToTandoor(
+  linkId: string,
   url: string,
   tandoorUrl: string,
   tandoorToken: string
@@ -174,6 +175,12 @@ async function importSocialMediaToTandoor(
       return { error: `Failed to create recipe (${createRes.status}): ${JSON.stringify(createdRecipe).substring(0, 200)}` };
     }
 
+    // Save Tandoor recipe ID to database
+    await prisma.link.update({
+      where: { id: linkId },
+      data: { tandoorRecipeId: createdRecipe.id },
+    });
+
     // Step 3: Upload recipe image via PUT /api/recipe/{id}/image/ (like kitshn does)
     if (scraped.imageURL) {
       try {
@@ -196,9 +203,10 @@ async function importSocialMediaToTandoor(
       }
     }
 
+    revalidatePath("/");
     return {
       success: true,
-      importUrl: `${tandoorUrl}/view/recipe/${createdRecipe.id}`,
+      tandoorRecipeId: createdRecipe.id,
     };
   } catch (e) {
     console.error("[importSocialMedia] Error:", e);
@@ -207,6 +215,7 @@ async function importSocialMediaToTandoor(
 }
 
 async function importBookmarkletToTandoor(
+  linkId: string,
   url: string,
   tandoorUrl: string,
   tandoorToken: string

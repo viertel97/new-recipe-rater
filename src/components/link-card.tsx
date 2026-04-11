@@ -13,6 +13,7 @@ type LinkItem = {
   urgency: Urgency | null;
   notes: string | null;
   reviewNote: string | null;
+  tandoorRecipeId: number | null;
   createdAt: Date;
   submittedById: string;
   submittedBy: { name: string | null; email: string | null };
@@ -254,11 +255,12 @@ function RatingIndicator({ rating }: { rating: string }) {
   );
 }
 
-export function LinkCard({ link, canReview }: { link: LinkItem; canReview: boolean }) {
+export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canReview: boolean; tandoorUrl?: string }) {
   const [optimisticRating, setOptimisticRating] = useOptimistic(link.rating);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [localTandoorRecipeId, setLocalTandoorRecipeId] = useState(link.tandoorRecipeId);
   const [selectedUrgency, setSelectedUrgency] = useState<Urgency | undefined>(link.urgency ?? undefined);
   const [reviewNote, setReviewNote] = useState(link.reviewNote ?? "");
   const [expanded, setExpanded] = useState(false);
@@ -284,9 +286,11 @@ export function LinkCard({ link, canReview }: { link: LinkItem; canReview: boole
     setImporting(true);
     setImportStatus(null);
     const result = await importToTandoor(link.id);
-    if (result.error) {
+    if ("error" in result) {
       setImportStatus(result.error);
-    } else if (result.importUrl) {
+    } else if ("tandoorRecipeId" in result) {
+      setLocalTandoorRecipeId(result.tandoorRecipeId);
+    } else if ("importUrl" in result) {
       window.open(result.importUrl, "_blank");
       setImportStatus("Sent to Tandoor");
     }
@@ -473,21 +477,34 @@ export function LinkCard({ link, canReview }: { link: LinkItem; canReview: boole
           </div>
         )}
 
-        {/* Import to Tandoor */}
+        {/* Import to Tandoor / View in Tandoor */}
         {optimisticRating === "GOOD" && (
           <div className="pt-1">
-            <button
-              onClick={handleImportToTandoor}
-              disabled={importing}
-              className="w-full px-3 py-2 rounded-lg text-xs font-medium tracking-wide
-                border border-blue-500/30 bg-blue-500/10 text-blue-400
-                hover:bg-blue-500/20 transition-all duration-200
-                disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {importing ? "Importing..." : "Import to Tandoor"}
-            </button>
+            {localTandoorRecipeId && tandoorUrl ? (
+              <a
+                href={`${tandoorUrl}/view/recipe/${localTandoorRecipeId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full px-3 py-2 rounded-lg text-xs font-medium tracking-wide text-center
+                  border border-green-500/30 bg-green-500/10 text-green-400
+                  hover:bg-green-500/20 transition-all duration-200"
+              >
+                View in Tandoor
+              </a>
+            ) : (
+              <button
+                onClick={handleImportToTandoor}
+                disabled={importing}
+                className="w-full px-3 py-2 rounded-lg text-xs font-medium tracking-wide
+                  border border-blue-500/30 bg-blue-500/10 text-blue-400
+                  hover:bg-blue-500/20 transition-all duration-200
+                  disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {importing ? "Importing..." : "Import to Tandoor"}
+              </button>
+            )}
             {importStatus && (
-              <p className={`text-[11px] mt-1.5 ${importStatus.startsWith("Sent") ? "text-green-400" : "text-red-400"}`}>
+              <p className={`text-[11px] mt-1.5 text-red-400`}>
                 {importStatus}
               </p>
             )}

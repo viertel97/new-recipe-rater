@@ -10,6 +10,7 @@ type LinkItem = {
   urgency: "TOMORROW" | "NEXT_WEEK" | "NEXT_MONTH" | "ARCHIVE" | null;
   notes: string | null;
   reviewNote: string | null;
+  tandoorRecipeId: number | null;
   createdAt: Date;
   submittedById: string;
   submittedBy: { name: string | null; email: string | null };
@@ -22,7 +23,7 @@ const filters = [
   { key: "BAD", label: "Bad" },
 ] as const;
 
-export function Dashboard({ links, currentUserId }: { links: LinkItem[]; currentUserId: string }) {
+export function Dashboard({ links, currentUserId, tandoorUrl }: { links: LinkItem[]; currentUserId: string; tandoorUrl?: string }) {
   const [filter, setFilter] = useState<string>("ALL");
 
   const filtered = filter === "ALL" ? links : links.filter((l) => l.rating === filter);
@@ -76,7 +77,7 @@ export function Dashboard({ links, currentUserId }: { links: LinkItem[]; current
               className="animate-card-enter"
               style={{ animationDelay: `${i * 60}ms` }}
             >
-              <LinkCard link={link} canReview={link.submittedById !== currentUserId} />
+              <LinkCard link={link} canReview={link.submittedById !== currentUserId} tandoorUrl={tandoorUrl} />
             </div>
           ))}
         </div>

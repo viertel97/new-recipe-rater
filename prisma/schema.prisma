@@ -19,13 +19,14 @@ model User {
 }
 
 model Link {
-  id          String   @id @default(cuid())
-  url         String
-  rating      Rating   @default(PENDING)
-  urgency     Urgency?
-  notes       String?
-  reviewNote  String?
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  url             String
+  rating          Rating   @default(PENDING)
+  urgency         Urgency?
+  notes           String?
+  reviewNote      String?
+  tandoorRecipeId Int?
+  createdAt       DateTime @default(now())
 
   submittedBy   User   @relation(fields: [submittedById], references: [id])
   submittedById String

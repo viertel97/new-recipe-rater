@@ -27,7 +27,7 @@ export default async function Home() {
           </div>
         </div>
         <div className="animate-slide-up" style={{ animationDelay: "100ms" }}>
-          <Dashboard links={links} currentUserId={session.user.id} />
+          <Dashboard links={links} currentUserId={session.user.id} tandoorUrl={process.env.TANDOOR_URL} />
         </div>
       </main>
     </div>
