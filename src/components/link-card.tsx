@@ -3,21 +3,7 @@
 import { useState, useOptimistic, useEffect, useCallback, startTransition } from "react";
 import { createPortal } from "react-dom";
 import { rateLink, resetRating, importToTandoor } from "@/lib/actions";
-
-type Urgency = "TOMORROW" | "NEXT_WEEK" | "NEXT_MONTH" | "ARCHIVE";
-
-type LinkItem = {
-  id: string;
-  url: string;
-  rating: "PENDING" | "GOOD" | "BAD";
-  urgency: Urgency | null;
-  notes: string | null;
-  reviewNote: string | null;
-  tandoorRecipeId: number | null;
-  createdAt: Date;
-  submittedById: string;
-  submittedBy: { name: string | null; email: string | null };
-};
+import { type Urgency, type LinkItem, type OgData } from "@/types/link";
 
 function getPostId(url: string): string | null {
   const match = url.match(/instagram\.com\/(?:p|reel|reels|tv)\/([\w-]+)/);
@@ -27,9 +13,6 @@ function getPostId(url: string): string | null {
 function isInstagramUrl(url: string): boolean {
   return /instagram\.com\/(p|reel|reels|tv)\//.test(url);
 }
-
-
-type OgData = { title: string | null; image: string | null; description: string | null; siteName: string | null };
 
 function OgPreview({ url }: { url: string }) {
   const [og, setOg] = useState<OgData | null>(null);
