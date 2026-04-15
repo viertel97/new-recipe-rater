@@ -274,7 +274,6 @@ export async function rateLink(
 
   const link = await prisma.link.findUnique({ where: { id: linkId } });
   if (!link) return { error: "Link not found" };
-  if (link.submittedById === session.user.id) return { error: "You cannot review your own submission" };
 
   await prisma.link.update({
     where: { id: linkId },

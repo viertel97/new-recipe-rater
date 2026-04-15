@@ -21,18 +21,25 @@ const filters = [
   { key: "PENDING", label: "Pending" },
   { key: "GOOD", label: "Good" },
   { key: "BAD", label: "Bad" },
+  { key: "TANDOOR", label: "In Tandoor" },
 ] as const;
 
 export function Dashboard({ links, currentUserId, tandoorUrl }: { links: LinkItem[]; currentUserId: string; tandoorUrl?: string }) {
   const [filter, setFilter] = useState<string>("ALL");
 
-  const filtered = filter === "ALL" ? links : links.filter((l) => l.rating === filter);
+  let filtered = links;
+  if (filter === "TANDOOR") {
+    filtered = links.filter((l) => l.tandoorRecipeId != null);
+  } else if (filter !== "ALL") {
+    filtered = links.filter((l) => l.rating === filter);
+  }
 
   const counts = {
     ALL: links.length,
     PENDING: links.filter((l) => l.rating === "PENDING").length,
     GOOD: links.filter((l) => l.rating === "GOOD").length,
     BAD: links.filter((l) => l.rating === "BAD").length,
+    TANDOOR: links.filter((l) => l.tandoorRecipeId != null).length,
   };
 
   return (
@@ -77,7 +84,7 @@ export function Dashboard({ links, currentUserId, tandoorUrl }: { links: LinkIte
               className="animate-card-enter"
               style={{ animationDelay: `${i * 60}ms` }}
             >
-              <LinkCard link={link} canReview={link.submittedById !== currentUserId} tandoorUrl={tandoorUrl} />
+              <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
             </div>
           ))}
         </div>
