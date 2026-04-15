@@ -2,7 +2,7 @@
 
 import { useState, useOptimistic, useEffect, useCallback, startTransition } from "react";
 import { createPortal } from "react-dom";
-import { rateLink, importToTandoor } from "@/lib/actions";
+import { rateLink, resetRating, importToTandoor } from "@/lib/actions";
 
 type Urgency = "TOMORROW" | "NEXT_WEEK" | "NEXT_MONTH" | "ARCHIVE";
 
@@ -282,6 +282,16 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
     });
   }
 
+  async function handleReset() {
+    setLoading(true);
+    startTransition(async () => {
+      setOptimisticRating("PENDING");
+      await resetRating(link.id);
+      setLoading(false);
+      setExpanded(false);
+    });
+  }
+
   async function handleImportToTandoor() {
     setImporting(true);
     setImportStatus(null);
@@ -466,13 +476,20 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
         )}
 
         {/* Already rated - show compact info */}
-        {canReview && optimisticRating !== "PENDING" && (
-          <div className="flex gap-2 pt-1">
+        {canReview && optimisticRating !== "PENDING" && !expanded && (
+          <div className="flex gap-3 pt-1">
             <button
               onClick={() => setExpanded(true)}
               className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
             >
               Change rating
+            </button>
+            <button
+              onClick={handleReset}
+              disabled={loading}
+              className="text-[11px] text-red-400/50 hover:text-red-400 transition-colors disabled:opacity-40"
+            >
+              Remove rating
             </button>
           </div>
         )}

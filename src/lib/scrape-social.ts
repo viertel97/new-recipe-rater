@@ -1,26 +1,22 @@
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser } from "playwright-core";
 
 export type ScrapeResult = {
   description: string | null;
   imageURL: string | null;
 };
 
-let browserPromise: Promise<Browser> | null = null;
-
-function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = chromium.launch({
-      headless: true,
-      args: ["--disable-blink-features=AutomationControlled"],
-    });
-  }
-  return browserPromise;
+function connectBrowser(): Promise<Browser> {
+  const token = process.env.BROWSERLESS_API_KEY;
+  if (!token) throw new Error("BROWSERLESS_API_KEY is not set");
+  return chromium.connect(
+    `wss://production-sfo.browserless.io/chromium/playwright?token=${token}&launch={"args":["--disable-blink-features=AutomationControlled"]}`
+  );
 }
 
 /**
  * Dismiss Instagram popups: cookie consent + "Never miss a post" login modal.
  */
-async function dismissInstagramPopups(page: import("playwright").Page) {
+async function dismissInstagramPopups(page: import("playwright-core").Page) {
   // Cookie consent — "Allow all cookies"
   try {
     await page
@@ -56,7 +52,7 @@ async function dismissInstagramPopups(page: import("playwright").Page) {
 export async function scrapeSocialMediaPost(
   url: string
 ): Promise<ScrapeResult> {
-  const browser = await getBrowser();
+  const browser = await connectBrowser();
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
@@ -196,5 +192,6 @@ export async function scrapeSocialMediaPost(
     return { description: result.description, imageURL: result.imageURL };
   } finally {
     await context.close();
+    await browser.close();
   }
 }

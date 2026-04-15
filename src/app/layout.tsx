@@ -16,8 +16,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Insta Rater",
-  description: "Rate Instagram posts with your partner",
+  title: "Recipe Rater",
+  description: "Rate recipes with your partner",
 };
 
 export default function RootLayout({

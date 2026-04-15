@@ -223,7 +223,7 @@ async function importBookmarkletToTandoor(
   let html: string;
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; InstaRater/1.0)" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; RecipeRater/1.0)" },
     });
     html = await res.text();
   } catch {
@@ -252,6 +252,30 @@ async function importBookmarkletToTandoor(
   } catch {
     return { error: "Failed to connect to Tandoor" };
   }
+}
+
+export async function resetRating(linkId: string) {
+  const session = await auth();
+  if (!session?.user) return { error: "Not authenticated" };
+
+  if (!linkId || typeof linkId !== "string") {
+    return { error: "Invalid link ID" };
+  }
+
+  const link = await prisma.link.findUnique({ where: { id: linkId } });
+  if (!link) return { error: "Link not found" };
+
+  await prisma.link.update({
+    where: { id: linkId },
+    data: {
+      rating: "PENDING" as Rating,
+      urgency: null,
+      reviewNote: null,
+    },
+  });
+
+  revalidatePath("/");
+  return { success: true };
 }
 
 export async function rateLink(

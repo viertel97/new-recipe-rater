@@ -1,6 +1,6 @@
-# Insta Rater
+# Recipe Rater
 
-A web app where you submit Instagram post URLs and a partner reviews them as Good or Bad.
+A web app where you submit recipe URLs and a partner reviews them as Good or Bad.
 
 ## Tech Stack
 

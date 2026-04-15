@@ -20,7 +20,7 @@ model User {
 
 model Link {
   id              String   @id @default(cuid())
-  url             String
+  url             String   @unique
   rating          Rating   @default(PENDING)
   urgency         Urgency?
   notes           String?

@@ -9,7 +9,7 @@ export async function Header() {
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <h1 className="font-heading text-2xl italic tracking-tight text-foreground">
-          Insta Rater
+          Recipe Rater
         </h1>
         <div className="flex items-center gap-4">
           <span className="text-xs text-muted-foreground hidden sm:inline tracking-wide">

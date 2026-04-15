@@ -50,7 +50,7 @@ export default function LoginPage() {
         {/* Branding */}
         <div className="text-center mb-10">
           <h1 className="font-heading text-5xl italic tracking-tight text-foreground">
-            Insta Rater
+            Recipe Rater
           </h1>
           <p className="text-muted-foreground text-sm mt-3 tracking-wide uppercase">
             Curate together
