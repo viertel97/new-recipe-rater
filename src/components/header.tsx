@@ -12,6 +12,16 @@ export async function Header() {
           Recipe Rater
         </h1>
         <div className="flex items-center gap-4">
+          <a
+            href="/swipe"
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+            title="Swipe mode"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+              <rect x="2" y="2" width="20" height="20" rx="3" />
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </a>
           <span className="text-xs text-muted-foreground hidden sm:inline tracking-wide">
             {session.user.name || session.user.email}
           </span>

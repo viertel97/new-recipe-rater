@@ -2,19 +2,7 @@
 
 import { useState } from "react";
 import { LinkCard } from "@/components/link-card";
-
-type LinkItem = {
-  id: string;
-  url: string;
-  rating: "PENDING" | "GOOD" | "BAD";
-  urgency: "TOMORROW" | "NEXT_WEEK" | "NEXT_MONTH" | "ARCHIVE" | null;
-  notes: string | null;
-  reviewNote: string | null;
-  tandoorRecipeId: number | null;
-  createdAt: Date;
-  submittedById: string;
-  submittedBy: { name: string | null; email: string | null };
-};
+import { type LinkItem } from "@/types/link";
 
 const filters = [
   { key: "ALL", label: "All" },

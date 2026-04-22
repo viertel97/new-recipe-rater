@@ -219,3 +219,30 @@ input:focus-visible, textarea:focus-visible {
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.40 0.008 250);
 }
+
+/* Swipe view */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: sheet-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.swipe-stamp {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.25rem 1rem;
+  border: 4px solid currentColor;
+  border-radius: 0.5rem;
+  transform: rotate(-12deg);
+  pointer-events: none;
+  user-select: none;
+}
