@@ -33,6 +33,7 @@ from import_to_db import (
     load_entries,
     load_env,
     parse_since,
+    trigger_categorize,
 )
 
 DEFAULT_COLLECTION = "All posts"
@@ -63,7 +64,7 @@ def pull(collection_name: str, limit: int) -> Path:
     return path
 
 
-def do_import(paths: list[Path], since_raw: str, dry_run: bool) -> None:
+def do_import(paths: list[Path], since_raw: str, dry_run: bool) -> int:
     since = None if since_raw.lower() == "all" else parse_since(since_raw)
     load_env()
 
@@ -77,6 +78,7 @@ def do_import(paths: list[Path], since_raw: str, dry_run: bool) -> None:
 
     tag = "WOULD INSERT" if dry_run else "inserted"
     print(f"{tag}: {inserted}  skipped (dup): {skipped}")
+    return inserted
 
 
 def main() -> int:
@@ -96,7 +98,9 @@ def main() -> int:
     else:
         paths = [pull(args.collection, args.limit)]
 
-    do_import(paths, args.since, args.dry_run)
+    inserted = do_import(paths, args.since, args.dry_run)
+    if not args.dry_run and inserted > 0:
+        trigger_categorize()
     return 0
 
 

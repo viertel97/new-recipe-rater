@@ -26,10 +26,16 @@ model Link {
   notes           String?
   reviewNote      String?
   tandoorRecipeId Int?
+  category        Category?
+  categoryStatus  CategoryStatus @default(PENDING)
+  categoryError   String?
+  categoryAttempts Int @default(0)
   createdAt       DateTime @default(now())
 
   submittedBy   User   @relation(fields: [submittedById], references: [id])
   submittedById String
+
+  @@index([categoryStatus])
 }
 
 enum Rating {
@@ -43,5 +49,18 @@ enum Urgency {
   NEXT_WEEK
   NEXT_MONTH
   ARCHIVE
+}
+
+enum Category {
+  DINNER
+  SNACK
+  CAKE
+  BREAKFAST
+}
+
+enum CategoryStatus {
+  PENDING
+  DONE
+  FAILED
 }
 

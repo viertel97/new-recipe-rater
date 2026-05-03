@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+import urllib.request
 from cuid import cuid
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -25,6 +26,25 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 ENV_FILE = REPO_ROOT / ".env"
 
 SUBMITTER_USERNAME = "janik"
+
+
+def trigger_categorize() -> None:
+    url = os.environ.get("APP_URL", "http://localhost:3000")
+    secret = os.environ.get("API_SECRET")
+    if not secret:
+        print("API_SECRET not set, skipping categorization trigger.")
+        return
+    try:
+        req = urllib.request.Request(
+            f"{url}/api/admin/categorize-pending",
+            headers={"Authorization": f"Bearer {secret}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as res:
+            data = json.loads(res.read())
+            print(f"Triggered categorization for {data.get('queued', 0)} pending links.")
+    except Exception as e:
+        print(f"Warning: failed to trigger categorization: {e}")
 
 
 def load_env() -> None:
@@ -179,6 +199,10 @@ def main() -> int:
 
     tag = "WOULD INSERT" if args.dry_run else "inserted"
     print(f"{tag}: {inserted}  skipped (dup): {skipped}")
+
+    if not args.dry_run and inserted > 0:
+        trigger_categorize()
+
     return 0
 
 

@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { submitLinkSchema, rateLinkSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
-import { Rating, Urgency } from "@/generated/prisma/client";
+import { Rating, Urgency, Category } from "@/generated/prisma/client";
 
 const SOCIAL_MEDIA_DOMAINS = new Set([
   "instagram.com",
@@ -305,6 +305,26 @@ export async function rateLink(
       rating: rating as Rating,
       urgency: (parsed.data.urgency as Urgency) ?? null,
       reviewNote: parsed.data.reviewNote ?? null,
+    },
+  });
+
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function setCategory(
+  linkId: string,
+  category: "DINNER" | "SNACK" | "CAKE" | "BREAKFAST"
+) {
+  const session = await auth();
+  if (!session?.user) return { error: "Not authenticated" };
+
+  await prisma.link.update({
+    where: { id: linkId },
+    data: {
+      category: category as Category,
+      categoryStatus: "DONE",
+      categoryError: null,
     },
   });
 

@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { submitLinkSchema } from "@/lib/validations";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { categorizeLink } from "@/lib/categorize";
 
 export default async function AddLinkPage({
   params,
@@ -61,12 +63,14 @@ export default async function AddLinkPage({
     );
   }
 
-  await prisma.link.create({
+  const link = await prisma.link.create({
     data: {
       url: parsed.data.url,
       submittedById: submitter.id,
     },
   });
+
+  after(() => categorizeLink(link.id));
 
   redirect("/");
 }
