@@ -21,7 +21,7 @@ import urllib.request
 from cuid import cuid
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = SCRIPT_DIR / "output"
+OUTPUT_DIR = Path(os.environ.get("DATA_DIR", SCRIPT_DIR)) / "output"
 REPO_ROOT = SCRIPT_DIR.parent.parent
 ENV_FILE = REPO_ROOT / ".env"
 
