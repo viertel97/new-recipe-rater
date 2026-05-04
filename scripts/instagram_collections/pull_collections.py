@@ -19,8 +19,8 @@ from instagrapi.exceptions import LoginRequired, TwoFactorRequired
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SESSION_FILE = SCRIPT_DIR / "session.json"
-OUTPUT_DIR = SCRIPT_DIR / "output"
+SESSION_FILE = Path(os.environ.get("DATA_DIR", SCRIPT_DIR)) / "session.json"
+OUTPUT_DIR = Path(os.environ.get("DATA_DIR", SCRIPT_DIR)) / "output"
 
 
 def login(username: str, password: str) -> Client:

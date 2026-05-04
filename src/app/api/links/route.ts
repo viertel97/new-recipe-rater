@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { submitLinkSchema } from "@/lib/validations";
+import { categorizeLink } from "@/lib/categorize";
 
 function validateToken(request: NextRequest): boolean {
   const secret = process.env.API_SECRET;
@@ -54,6 +55,8 @@ export async function POST(request: NextRequest) {
       submittedById: submitter.id,
     },
   });
+
+  after(() => categorizeLink(link.id));
 
   return NextResponse.json({ success: true, id: link.id }, { status: 201 });
 }

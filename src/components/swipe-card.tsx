@@ -1,10 +1,24 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
-import { type LinkItem, type OgData } from "@/types/link";
+import { type LinkItem, type OgData, type Category } from "@/types/link";
 
 export type SwipeCardHandle = {
   triggerSwipe: (direction: "left" | "right") => void;
+};
+
+const categoryColors: Record<Category, string> = {
+  DINNER: "oklch(0.65 0.14 45)",
+  SNACK: "oklch(0.70 0.12 75)",
+  CAKE: "oklch(0.70 0.14 350)",
+  BREAKFAST: "oklch(0.75 0.12 90)",
+};
+
+const categoryLabels: Record<Category, string> = {
+  DINNER: "Dinner",
+  SNACK: "Snack",
+  CAKE: "Cake",
+  BREAKFAST: "Breakfast",
 };
 
 const SWIPE_THRESHOLD = 0.3; // 30% of screen width
@@ -258,6 +272,18 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
 
       {/* Recipe info overlay */}
       <div className="absolute bottom-20 left-0 right-0 px-5 z-10 pointer-events-none">
+        {link.category && (
+          <span
+            className="inline-block text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-0.5 rounded-full mb-2"
+            style={{
+              background: `color-mix(in oklch, ${categoryColors[link.category]} 20%, transparent)`,
+              color: categoryColors[link.category],
+              border: `1px solid color-mix(in oklch, ${categoryColors[link.category]} 30%, transparent)`,
+            }}
+          >
+            {categoryLabels[link.category]}
+          </span>
+        )}
         <p className="text-[10px] uppercase tracking-[0.15em] text-white/50 font-medium mb-1">{domain}</p>
         <p className="text-base font-semibold text-white line-clamp-2 leading-snug">
           {(media.type === "image" && media.ogData.title) || link.url}

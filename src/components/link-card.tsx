@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useOptimistic, useEffect, useCallback, startTransition } from "react";
+import { useState, useOptimistic, useEffect, useCallback, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
-import { rateLink, resetRating, importToTandoor } from "@/lib/actions";
-import { type Urgency, type LinkItem, type OgData } from "@/types/link";
+import { rateLink, resetRating, importToTandoor, setCategory } from "@/lib/actions";
+import { type Urgency, type LinkItem, type OgData, type Category } from "@/types/link";
 
 function getPostId(url: string): string | null {
   const match = url.match(/instagram\.com\/(?:p|reel|reels|tv)\/([\w-]+)/);
@@ -189,6 +189,13 @@ const urgencyConfig: Record<Urgency, { label: string; color: string }> = {
   ARCHIVE: { label: "Archive", color: "oklch(0.55 0.03 260)" },
 };
 
+const categoryConfig: Record<Category, { label: string; color: string }> = {
+  DINNER: { label: "Dinner", color: "oklch(0.65 0.14 45)" },
+  SNACK: { label: "Snack", color: "oklch(0.70 0.12 75)" },
+  CAKE: { label: "Cake", color: "oklch(0.70 0.14 350)" },
+  BREAKFAST: { label: "Breakfast", color: "oklch(0.75 0.12 90)" },
+};
+
 function UrgencyBadge({ urgency }: { urgency: Urgency }) {
   const c = urgencyConfig[urgency];
   return (
@@ -199,6 +206,101 @@ function UrgencyBadge({ urgency }: { urgency: Urgency }) {
       {c.label}
     </span>
   );
+}
+
+function CategoryBadge({ category, linkId }: { category: Category | null; linkId: string }) {
+  const [editing, setEditing] = useState(false);
+  const [optimisticCategory, setOptimisticCategory] = useState<Category | null>(category);
+
+  // Close editor when clicking outside
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!editing) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setEditing(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [editing]);
+
+  function pick(newCat: Category) {
+    setOptimisticCategory(newCat);
+    setEditing(false);
+    startTransition(async () => {
+      await setCategory(linkId, newCat);
+    });
+  }
+
+  const allCategories: Category[] = ["DINNER", "SNACK", "CAKE", "BREAKFAST"];
+
+  // Edit mode: show mini picker
+  if (editing) {
+    return (
+      <div ref={containerRef} className="flex items-center gap-1">
+        {allCategories.map((c) => {
+          const meta = categoryConfig[c];
+          const selected = optimisticCategory === c;
+          return (
+            <button
+              key={c}
+              onClick={() => pick(c)}
+              className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider border transition-all"
+              title={meta.label}
+              style={
+                selected
+                  ? {
+                      borderColor: `color-mix(in oklch, ${meta.color} 50%, transparent)`,
+                      background: `color-mix(in oklch, ${meta.color} 18%, transparent)`,
+                      color: meta.color,
+                    }
+                  : {
+                      borderColor: "transparent",
+                      color: "oklch(0.5 0 0 / 0.4)",
+                    }
+              }
+            >
+              {c === "BREAKFAST" ? "Brk" : c === "DINNER" ? "Din" : meta.label.slice(0, 3)}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Display mode
+  if (optimisticCategory) {
+    const c = categoryConfig[optimisticCategory];
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
+        style={{ background: `color-mix(in oklch, ${c.color} 12%, transparent)`, color: c.color }}
+        title="Click to change category"
+      >
+        {c.label}
+      </button>
+    );
+  }
+
+  // No category yet: show a subtle "+" to set one
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="inline-flex items-center text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-0.5 rounded-full cursor-pointer text-muted-foreground/50 hover:text-muted-foreground border border-dashed border-border/40 hover:border-border/70 transition-all"
+      title="Set category"
+    >
+      +
+    </button>
+  );
+}
+
+function formatNotePreview(notes: string | null): string | null {
+  if (!notes) return null;
+  const firstLine = notes.split("\n")[0];
+  if (!firstLine) return null;
+  return firstLine.length > 120 ? firstLine.slice(0, 120) + "…" : firstLine;
 }
 
 function RatingIndicator({ rating }: { rating: string }) {
@@ -340,9 +442,14 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
             >
               {link.url}
             </a>
-            {link.notes && (
-              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{link.notes}</p>
-            )}
+            {(() => {
+              const preview = formatNotePreview(link.notes);
+              return preview ? (
+                <p className="text-xs text-muted-foreground/70 mt-1.5 leading-relaxed truncate" title={link.notes ?? undefined}>
+                  {preview}
+                </p>
+              ) : null;
+            })()}
             <p className="text-[11px] text-muted-foreground/60 mt-2">
               {link.submittedBy.name || link.submittedBy.email || "Unknown"}
               <span className="mx-1.5 opacity-40">/</span>
@@ -353,6 +460,7 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <CategoryBadge category={link.category} linkId={link.id} />
             {link.urgency && <UrgencyBadge urgency={link.urgency} />}
             <RatingIndicator rating={optimisticRating} />
           </div>
