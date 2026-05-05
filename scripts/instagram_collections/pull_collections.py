@@ -14,13 +14,38 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import time
+
 from instagrapi import Client
 from instagrapi.exceptions import LoginRequired, TwoFactorRequired
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SESSION_FILE = Path(os.environ.get("DATA_DIR", SCRIPT_DIR)) / "session.json"
-OUTPUT_DIR = Path(os.environ.get("DATA_DIR", SCRIPT_DIR)) / "output"
+DATA_DIR = Path(os.environ.get("DATA_DIR", SCRIPT_DIR))
+SESSION_FILE = DATA_DIR / "session.json"
+OUTPUT_DIR = DATA_DIR / "output"
+TWO_FA_FILE = DATA_DIR / "2fa_pending.txt"
+
+_2FA_POLL_INTERVAL = 5
+_2FA_TIMEOUT = 120
+
+
+def _get_2fa_code() -> str:
+    if sys.stdin.isatty():
+        return input("2FA code: ").strip()
+    print(
+        f"2FA required. Write your code to: {TWO_FA_FILE}\n"
+        f"  e.g.: echo '123456' > {TWO_FA_FILE}",
+        file=sys.stderr,
+    )
+    deadline = time.monotonic() + _2FA_TIMEOUT
+    while time.monotonic() < deadline:
+        if TWO_FA_FILE.exists():
+            code = TWO_FA_FILE.read_text().strip()
+            TWO_FA_FILE.unlink()
+            return code
+        time.sleep(_2FA_POLL_INTERVAL)
+    raise RuntimeError(f"2FA code not provided within {_2FA_TIMEOUT}s.")
 
 
 def login(username: str, password: str) -> Client:
@@ -42,7 +67,7 @@ def login(username: str, password: str) -> Client:
     try:
         cl.login(username, password)
     except TwoFactorRequired:
-        code = input("2FA code: ").strip()
+        code = _get_2fa_code()
         cl.login(username, password, verification_code=code)
 
     cl.dump_settings(SESSION_FILE)

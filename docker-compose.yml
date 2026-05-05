@@ -24,8 +24,7 @@ services:
       API_SECRET: ${API_SECRET}
       DATA_DIR: /data
     volumes:
-      - ig-sync-data:/data
+      - ./data/ig-sync:/data
 
 volumes:
   pgdata:
-  ig-sync-data:
