@@ -1,11 +1,9 @@
-import fs from "node:fs/promises";
-import path from "node:path";
+import { put, del } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import { snapsave } from "snapsave-media-downloader";
 import { extractMeta, extractTitleTag } from "@/lib/og";
 import type { MediaAsset } from "@/generated/prisma/client";
 
-const MEDIA_ROOT = process.env.MEDIA_ROOT ?? path.join(process.cwd(), "data", "media");
 const FETCH_TIMEOUT_MS = 30_000;
 
 function isInstagramUrl(url: string): boolean {
@@ -21,10 +19,6 @@ function extFromContentType(ct: string): string {
   return "bin";
 }
 
-function shard(id: string): string {
-  return `${id.slice(0, 2)}/${id.slice(2, 4)}`;
-}
-
 // Per-sourceUrl mutex — concurrent calls for the same URL share one in-flight resolve
 const inFlight = new Map<string, Promise<MediaAsset | null>>();
 
@@ -36,15 +30,8 @@ export async function resolveMediaForLink(linkId: string): Promise<MediaAsset | 
 
   if (!link || link.rating !== "PENDING") return null;
 
-  // Already resolved
-  if (link.mediaAsset) {
-    try {
-      await fs.access(path.join(MEDIA_ROOT, link.mediaAsset.localPath));
-      return link.mediaAsset;
-    } catch {
-      // File missing — fall through to re-resolve
-    }
-  }
+  // Already resolved and blob URL still set
+  if (link.mediaAsset?.blobUrl) return link.mediaAsset;
 
   const existing = inFlight.get(link.url);
   if (existing) return existing;
@@ -57,7 +44,7 @@ export async function resolveMediaForLink(linkId: string): Promise<MediaAsset | 
 async function doResolve(linkId: string, url: string): Promise<MediaAsset | null> {
   try {
     let mediaUrl: string;
-    let thumbnailUrl: string | undefined;
+    let thumbnailSourceUrl: string | undefined;
     let title: string | undefined;
     let description: string | undefined;
     let isVideo = false;
@@ -74,7 +61,7 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
         return null;
       }
       mediaUrl = media.url;
-      thumbnailUrl = media.thumbnail ?? undefined;
+      thumbnailSourceUrl = media.thumbnail ?? undefined;
       isVideo = media.type === "video";
     } else {
       const res = await fetch(url, {
@@ -92,7 +79,7 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
       mediaUrl = imageUrl;
     }
 
-    // Download the media file
+    // Download media
     const dlRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!dlRes.ok || !dlRes.body) {
       await markFailed(linkId, `download failed: ${dlRes.status}`);
@@ -100,48 +87,34 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
     }
 
     const contentType = dlRes.headers.get("content-type") ?? (isVideo ? "video/mp4" : "image/jpeg");
-    const id = generateId();
-    const dir = path.join(MEDIA_ROOT, shard(id));
     const ext = extFromContentType(contentType);
-    const filename = `${id}.${ext}`;
-    const localPath = `${shard(id)}/${filename}`;
-    const fullPath = path.join(MEDIA_ROOT, localPath);
+    const id = generateId();
+    const pathname = `media/${id}.${ext}`;
 
-    await fs.mkdir(dir, { recursive: true });
+    const { url: blobUrl } = await put(pathname, dlRes.body, {
+      access: "public",
+      contentType,
+    });
 
-    const chunks: Uint8Array[] = [];
-    const reader = dlRes.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-    }
-    const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-    await fs.writeFile(fullPath, buffer);
-
-    // Download thumbnail if video
-    let thumbnailPath: string | undefined;
-    if (thumbnailUrl) {
+    // Upload thumbnail best-effort
+    let thumbnailUrl: string | undefined;
+    if (thumbnailSourceUrl) {
       try {
-        const thumbRes = await fetch(thumbnailUrl, { signal: AbortSignal.timeout(10_000) });
+        const thumbRes = await fetch(thumbnailSourceUrl, { signal: AbortSignal.timeout(10_000) });
         if (thumbRes.ok && thumbRes.body) {
-          const thumbFilename = `${id}_thumb.jpg`;
-          const thumbLocalPath = `${shard(id)}/${thumbFilename}`;
-          const thumbFullPath = path.join(MEDIA_ROOT, thumbLocalPath);
-          const thumbChunks: Uint8Array[] = [];
-          const thumbReader = thumbRes.body.getReader();
-          while (true) {
-            const { done, value } = await thumbReader.read();
-            if (done) break;
-            thumbChunks.push(value);
-          }
-          await fs.writeFile(thumbFullPath, Buffer.concat(thumbChunks.map((c) => Buffer.from(c))));
-          thumbnailPath = thumbLocalPath;
+          const { url: tUrl } = await put(`media/${id}_thumb.jpg`, thumbRes.body, {
+            access: "public",
+            contentType: "image/jpeg",
+          });
+          thumbnailUrl = tUrl;
         }
       } catch {
         // thumbnail is best-effort
       }
     }
+
+    // Approximate size from content-length; fall back to 0
+    const sizeBytes = parseInt(dlRes.headers.get("content-length") ?? "0", 10);
 
     const asset = await prisma.$transaction(async (tx) => {
       const created = await tx.mediaAsset.create({
@@ -149,10 +122,10 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
           id,
           sourceUrl: url,
           type: isVideo ? "VIDEO" : "IMAGE",
-          localPath,
+          blobUrl,
           contentType,
-          sizeBytes: buffer.byteLength,
-          thumbnailPath,
+          sizeBytes,
+          thumbnailUrl,
           title,
           description,
         },
@@ -164,7 +137,7 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
       return created;
     });
 
-    console.log(`[media-store] resolved sourceUrl=${url} type=${asset.type} size=${asset.sizeBytes} id=${id}`);
+    console.log(`[media-store] resolved sourceUrl=${url} type=${asset.type} size=${sizeBytes} id=${id}`);
     return asset;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -189,12 +162,14 @@ export async function evictMediaForLink(linkId: string): Promise<void> {
   if (!link?.mediaAsset) return;
 
   const asset = link.mediaAsset;
+  const urlsToDelete = [asset.blobUrl, asset.thumbnailUrl].filter(Boolean) as string[];
 
-  // Best-effort file deletion
-  await Promise.allSettled([
-    fs.unlink(path.join(MEDIA_ROOT, asset.localPath)),
-    asset.thumbnailPath ? fs.unlink(path.join(MEDIA_ROOT, asset.thumbnailPath)) : Promise.resolve(),
-  ]);
+  // Best-effort blob deletion
+  if (urlsToDelete.length > 0) {
+    await del(urlsToDelete).catch((err) =>
+      console.error(`[media-store] blob delete failed for ${asset.id}:`, err)
+    );
+  }
 
   await prisma.$transaction([
     prisma.link.update({
@@ -205,7 +180,6 @@ export async function evictMediaForLink(linkId: string): Promise<void> {
   ]);
 }
 
-// Simple cuid-like ID without external dep
 function generateId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).slice(2, 10);

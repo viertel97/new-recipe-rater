@@ -48,10 +48,10 @@ model MediaAsset {
   id            String    @id @default(cuid())
   sourceUrl     String    @unique
   type          MediaType
-  localPath     String
+  blobUrl       String
   contentType   String
   sizeBytes     Int
-  thumbnailPath String?
+  thumbnailUrl  String?
   title         String?
   description   String?
   fetchedAt     DateTime  @default(now())

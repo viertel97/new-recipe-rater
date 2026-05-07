@@ -10,10 +10,10 @@ export type MediaAsset = {
   id: string;
   sourceUrl: string;
   type: "VIDEO" | "IMAGE";
-  localPath: string;
+  blobUrl: string;
   contentType: string;
   sizeBytes: number;
-  thumbnailPath: string | null;
+  thumbnailUrl: string | null;
   title: string | null;
   description: string | null;
   fetchedAt: Date;

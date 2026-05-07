@@ -36,11 +36,11 @@ function mediaAssetToState(asset: MediaAsset): MediaState {
   if (asset.type === "VIDEO") {
     return {
       type: "video",
-      videoUrl: `/api/media/${asset.id}`,
-      thumbnail: asset.thumbnailPath ? `/api/media-thumb/${asset.id}` : undefined,
+      videoUrl: asset.blobUrl,
+      thumbnail: asset.thumbnailUrl ?? undefined,
     };
   }
-  return { type: "image", image: `/api/media/${asset.id}`, title: asset.title, siteName: null };
+  return { type: "image", image: asset.blobUrl, title: asset.title, siteName: null };
 }
 
 function useCardMedia(link: LinkItem): MediaState {

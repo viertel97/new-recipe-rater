@@ -46,14 +46,16 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Only handle same-origin GETs
-  if (request.method !== "GET" || url.origin !== location.origin) return;
+  if (request.method !== "GET") return;
 
-  // /api/media/* — cache-first (immutable served media)
-  if (url.pathname.startsWith("/api/media")) {
+  // Cache public Vercel Blob media (cross-origin)
+  if (url.hostname.endsWith(".public.blob.vercel-storage.com")) {
     event.respondWith(cacheFirst(request, RUNTIME));
     return;
   }
+
+  // Only handle same-origin requests from here on
+  if (url.origin !== location.origin) return;
 
   // /_next/static/* — cache-first (hashed filenames)
   if (url.pathname.startsWith("/_next/static/")) {
