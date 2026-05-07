@@ -11,7 +11,10 @@ export default async function Home() {
 
   const links = await prisma.link.findMany({
     orderBy: { createdAt: "desc" },
-    include: { submittedBy: { select: { name: true, email: true } } },
+    include: {
+      submittedBy: { select: { name: true, email: true } },
+      mediaAsset: true,
+    },
   });
 
   return (
