@@ -2,16 +2,18 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { type LinkItem, type Urgency } from "@/types/link";
-import { useSwipeQueue, type SwipeFilters } from "@/lib/swipe-queue";
+import { useSwipeQueue } from "@/lib/swipe-queue";
+import { useSwipeFilters } from "@/lib/swipe-filters";
 import { MediaCache } from "@/lib/media-cache";
 import { SwipeCard, type SwipeCardHandle } from "@/components/swipe-card";
 import { UrgencySheet } from "@/components/urgency-sheet";
-
-const NO_FILTER: SwipeFilters = { categories: [], includeUncategorized: true };
+import { SwipeFilterSheet } from "@/components/swipe-filter-sheet";
 
 export function SwipeView({ links }: { links: LinkItem[] }) {
-  const { active, next, remaining, stats, rate } = useSwipeQueue(links, NO_FILTER);
+  const { filters, apply: applyFilters, reset: resetFilters, activeCount: filterCount } = useSwipeFilters();
+  const { active, next, remaining, stats, rate } = useSwipeQueue(links, filters);
   const [showUrgency, setShowUrgency] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const pendingSwipeId = useRef<string | null>(null);
   const activeCardRef = useRef<SwipeCardHandle>(null);
@@ -58,6 +60,8 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
     activeCardRef.current?.triggerSwipe(direction);
   }, []);
 
+  const anySheetOpen = showUrgency || showFilters;
+
   if (isDesktop) {
     return (
       <div className="h-dvh bg-background flex flex-col items-center justify-center gap-4">
@@ -95,7 +99,17 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
       <div className="h-dvh bg-background flex flex-col items-center justify-center text-center px-8 gap-4">
         <div className="text-5xl opacity-80">🎉</div>
         <p className="text-base font-semibold text-foreground/80">All caught up!</p>
-        <p className="text-xs text-muted-foreground/50 leading-relaxed">You&apos;ve rated all pending recipes.</p>
+        <p className="text-xs text-muted-foreground/50 leading-relaxed">
+          {filterCount > 0 ? "No more matching recipes." : "You've rated all pending recipes."}
+        </p>
+        {filterCount > 0 && (
+          <button
+            onClick={() => { resetFilters(); }}
+            className="text-xs px-4 py-2 rounded-lg border border-border/60 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Clear filters
+          </button>
+        )}
         <div className="flex gap-6 mt-2">
           <div className="text-center">
             <p className="text-xl font-bold" style={{ color: "oklch(0.55 0.15 145)" }}>{stats.liked}</p>
@@ -121,7 +135,9 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
       className="h-dvh bg-background overflow-hidden relative"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-3"
+      {/* Top bar */}
+      <div
+        className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4"
         style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}
       >
         <a href="/" className="w-10 h-10 flex items-center justify-center rounded-full bg-black/30 backdrop-blur-sm">
@@ -129,19 +145,34 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </a>
+
         <span className="text-xs text-white/50 font-medium bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
           {remaining} left
         </span>
+
+        {/* Filter button */}
+        <button
+          onClick={() => setShowFilters(true)}
+          className="relative w-10 h-10 flex items-center justify-center rounded-full bg-black/30 backdrop-blur-sm"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="w-5 h-5">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+          </svg>
+          {filterCount > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center text-white"
+              style={{ background: "oklch(0.55 0.15 145)" }}
+            >
+              {filterCount}
+            </span>
+          )}
+        </button>
       </div>
 
+      {/* Card stack */}
       <div className="absolute inset-0">
         {next && (
-          <SwipeCard
-            key={next.id}
-            link={next}
-            onSwipe={() => {}}
-            active={false}
-          />
+          <SwipeCard key={next.id} link={next} onSwipe={() => {}} active={false} />
         )}
         {active && (
           <SwipeCard
@@ -149,17 +180,28 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
             ref={activeCardRef}
             link={active}
             onSwipe={handleSwipe}
-            active={!showUrgency}
+            active={!anySheetOpen}
           />
         )}
       </div>
 
+      {/* Sheets */}
       {showUrgency && (
         <UrgencySheet onSelect={handleUrgencySelect} onSkip={handleUrgencySkip} />
       )}
+      {showFilters && (
+        <SwipeFilterSheet
+          current={filters}
+          onApply={applyFilters}
+          onReset={resetFilters}
+          onClose={() => setShowFilters(false)}
+        />
+      )}
 
-      {!showUrgency && active && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 flex justify-center gap-8 pb-6"
+      {/* Action buttons */}
+      {!anySheetOpen && active && (
+        <div
+          className="absolute bottom-0 left-0 right-0 z-20 flex justify-center gap-8 pb-6"
           style={{ paddingBottom: "max(24px, env(safe-area-inset-bottom))" }}
         >
           <button
