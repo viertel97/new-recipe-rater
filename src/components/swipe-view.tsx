@@ -1,20 +1,21 @@
 "use client";
 
-import { useState, useCallback, startTransition, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { type LinkItem, type Urgency } from "@/types/link";
-import { rateLink } from "@/lib/actions";
+import { useSwipeQueue, type SwipeFilters } from "@/lib/swipe-queue";
+import { MediaCache } from "@/lib/media-cache";
 import { SwipeCard, type SwipeCardHandle } from "@/components/swipe-card";
 import { UrgencySheet } from "@/components/urgency-sheet";
 
+const NO_FILTER: SwipeFilters = { categories: [], includeUncategorized: true };
+
 export function SwipeView({ links }: { links: LinkItem[] }) {
-  const [index, setIndex] = useState(0);
+  const { active, next, remaining, stats, rate } = useSwipeQueue(links, NO_FILTER);
   const [showUrgency, setShowUrgency] = useState(false);
-  const [stats, setStats] = useState({ liked: 0, noped: 0 });
   const [isDesktop, setIsDesktop] = useState(false);
   const pendingSwipeId = useRef<string | null>(null);
   const activeCardRef = useRef<SwipeCardHandle>(null);
 
-  // Desktop detection
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
     check();
@@ -22,63 +23,41 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Preload media for next 2 cards
+  // Warm the back card's media before promotion
   useEffect(() => {
-    for (let i = index + 1; i <= index + 2 && i < links.length; i++) {
-      const link = links[i];
-      const isInsta = /instagram\.com\/(p|reel|reels|tv)\//.test(link.url);
-      if (isInsta) {
-        fetch(`/api/instagram?url=${encodeURIComponent(link.url)}`);
-      } else {
-        fetch(`/api/og?url=${encodeURIComponent(link.url)}`);
-      }
-    }
-  }, [index, links]);
-
-  const advance = useCallback(() => {
-    setIndex((i) => i + 1);
-    setShowUrgency(false);
-  }, []);
+    if (next) MediaCache.warm(next);
+  }, [next]);
 
   const handleSwipe = useCallback((direction: "left" | "right") => {
-    const link = links[index];
-    if (!link) return;
-
+    if (!active) return;
     if (direction === "left") {
-      setStats((s) => ({ ...s, noped: s.noped + 1 }));
-      startTransition(() => { rateLink(link.id, "BAD"); });
-      advance();
+      rate(active.id, "BAD");
     } else {
-      // Right swipe — show urgency sheet
-      pendingSwipeId.current = link.id;
-      setStats((s) => ({ ...s, liked: s.liked + 1 }));
+      pendingSwipeId.current = active.id;
       setShowUrgency(true);
     }
-  }, [index, links, advance]);
+  }, [active, rate]);
 
   const handleUrgencySelect = useCallback((urgency: Urgency) => {
     if (pendingSwipeId.current) {
-      startTransition(() => { rateLink(pendingSwipeId.current!, "GOOD", { urgency }); });
+      rate(pendingSwipeId.current, "GOOD", { urgency });
     }
     pendingSwipeId.current = null;
-    advance();
-  }, [advance]);
+    setShowUrgency(false);
+  }, [rate]);
 
   const handleUrgencySkip = useCallback(() => {
     if (pendingSwipeId.current) {
-      startTransition(() => { rateLink(pendingSwipeId.current!, "GOOD"); });
+      rate(pendingSwipeId.current, "GOOD");
     }
     pendingSwipeId.current = null;
-    advance();
-  }, [advance]);
+    setShowUrgency(false);
+  }, [rate]);
 
   const triggerButtonSwipe = useCallback((direction: "left" | "right") => {
-    if (activeCardRef.current) {
-      activeCardRef.current.triggerSwipe(direction);
-    }
+    activeCardRef.current?.triggerSwipe(direction);
   }, []);
 
-  // Desktop gate
   if (isDesktop) {
     return (
       <div className="h-dvh bg-background flex flex-col items-center justify-center gap-4">
@@ -93,7 +72,6 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
     );
   }
 
-  // Empty state
   if (links.length === 0) {
     return (
       <div className="h-dvh bg-background flex flex-col items-center justify-center text-center px-8 gap-4">
@@ -112,8 +90,7 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
     );
   }
 
-  // Completion state
-  if (index >= links.length) {
+  if (remaining === 0) {
     return (
       <div className="h-dvh bg-background flex flex-col items-center justify-center text-center px-8 gap-4">
         <div className="text-5xl opacity-80">🎉</div>
@@ -144,7 +121,6 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
       className="h-dvh bg-background overflow-hidden relative"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
-      {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-3"
         style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}
       >
@@ -154,34 +130,35 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
           </svg>
         </a>
         <span className="text-xs text-white/50 font-medium bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
-          {index + 1} of {links.length}
+          {remaining} left
         </span>
       </div>
 
-      {/* Card stack */}
       <div className="absolute inset-0">
-        {links.map((link, i) => {
-          if (i < index || i > index + 1) return null;
-          const isActive = i === index && !showUrgency;
-          return (
-            <SwipeCard
-              key={link.id}
-              ref={isActive ? activeCardRef : null}
-              link={link}
-              onSwipe={handleSwipe}
-              active={isActive}
-            />
-          );
-        })}
+        {next && (
+          <SwipeCard
+            key={next.id}
+            link={next}
+            onSwipe={() => {}}
+            active={false}
+          />
+        )}
+        {active && (
+          <SwipeCard
+            key={active.id}
+            ref={activeCardRef}
+            link={active}
+            onSwipe={handleSwipe}
+            active={!showUrgency}
+          />
+        )}
       </div>
 
-      {/* Urgency sheet */}
       {showUrgency && (
         <UrgencySheet onSelect={handleUrgencySelect} onSkip={handleUrgencySkip} />
       )}
 
-      {/* Action buttons */}
-      {!showUrgency && index < links.length && (
+      {!showUrgency && active && (
         <div className="absolute bottom-0 left-0 right-0 z-20 flex justify-center gap-8 pb-6"
           style={{ paddingBottom: "max(24px, env(safe-area-inset-bottom))" }}
         >
