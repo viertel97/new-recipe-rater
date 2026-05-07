@@ -201,6 +201,36 @@ async function markFailed(linkId: string, reason: string) {
   }).catch(() => {});
 }
 
+export async function resetStaleBlobAssets(): Promise<number> {
+  const assets = await prisma.mediaAsset.findMany({
+    select: { id: true, blobUrl: true },
+  });
+
+  const staleIds: string[] = [];
+  for (const asset of assets) {
+    if (!asset.blobUrl.startsWith("https://")) {
+      staleIds.push(asset.id);
+      continue;
+    }
+    try {
+      const res = await fetch(asset.blobUrl, { method: "HEAD" });
+      if (res.status === 404) staleIds.push(asset.id);
+    } catch {}
+  }
+
+  if (staleIds.length === 0) return 0;
+
+  await prisma.$transaction([
+    prisma.link.updateMany({
+      where: { mediaAssetId: { in: staleIds } },
+      data: { mediaAssetId: null, mediaStatus: "PENDING", mediaError: null },
+    }),
+    prisma.mediaAsset.deleteMany({ where: { id: { in: staleIds } } }),
+  ]);
+
+  return staleIds.length;
+}
+
 export async function evictMediaForLink(linkId: string): Promise<void> {
   const link = await prisma.link.findUnique({
     where: { id: linkId },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
-import { resolveMediaForLink } from "@/lib/media-store";
+import { resolveMediaForLink, resetStaleBlobAssets } from "@/lib/media-store";
 
 function validateToken(request: NextRequest): boolean {
   const secret = process.env.API_SECRET;
@@ -17,16 +17,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const pending = await prisma.link.findMany({
-    where: { mediaStatus: { in: ["PENDING", "FAILED"] } },
-    select: { id: true },
-  });
-
   after(async () => {
+    const reset = await resetStaleBlobAssets();
+    if (reset > 0) console.log(`[backfill-media] reset ${reset} stale blob assets`);
+
+    const pending = await prisma.link.findMany({
+      where: { mediaStatus: { in: ["PENDING", "FAILED"] } },
+      select: { id: true },
+    });
     for (const link of pending) {
       await resolveMediaForLink(link.id, { force: true });
     }
   });
 
-  return NextResponse.json({ queued: pending.length });
+  return NextResponse.json({ ok: true });
 }

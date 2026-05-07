@@ -91,12 +91,20 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
   const [flying, setFlying] = useState<"left" | "right" | null>(null);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(true);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const progressSeekingRef = useRef(false);
   // Sync imperative video.muted with React state — fixes stale-read bug
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
   }, [muted]);
   const media = useCardMedia(link);
+
+  useEffect(() => {
+    setVideoProgress(0);
+    setVideoDuration(0);
+  }, [media]);
 
   const screenWidth = typeof window !== "undefined" ? window.innerWidth : 400;
   const threshold = screenWidth * SWIPE_THRESHOLD;
@@ -199,6 +207,13 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
             className="w-full h-full object-cover"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); setPlaying((p) => !p); }}
+            onTimeUpdate={() => {
+              const v = videoRef.current;
+              if (v && v.duration > 0) setVideoProgress(v.currentTime / v.duration);
+            }}
+            onLoadedMetadata={() => {
+              if (videoRef.current) setVideoDuration(videoRef.current.duration);
+            }}
           />
         )}
         {media.type === "image" && media.image && (
@@ -271,8 +286,52 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
         }}
       />
 
+      {/* Video progress bar */}
+      {media.type === "video" && videoDuration > 0 && (
+        <div
+          className="absolute left-0 right-0 z-20"
+          style={{ bottom: 0, height: 20, paddingBottom: 6 }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            progressSeekingRef.current = true;
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            const rect = e.currentTarget.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            if (videoRef.current) videoRef.current.currentTime = ratio * videoDuration;
+          }}
+          onPointerMove={(e) => {
+            if (!progressSeekingRef.current) return;
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            if (videoRef.current) videoRef.current.currentTime = ratio * videoDuration;
+          }}
+          onPointerUp={(e) => { e.stopPropagation(); progressSeekingRef.current = false; }}
+          onPointerCancel={(e) => { e.stopPropagation(); progressSeekingRef.current = false; }}
+        >
+          <div className="w-full h-[3px] bg-white/20 rounded-full relative overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 bg-white/80 rounded-full"
+              style={{ width: `${videoProgress * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Top-right controls */}
       <div className="absolute top-16 right-4 z-20 flex flex-col gap-2">
+        {media.type === "image" && (
+          <div
+            className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center"
+            aria-label="Image"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="w-4 h-4">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </div>
+        )}
         {media.type === "video" && (
           <button
             className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
