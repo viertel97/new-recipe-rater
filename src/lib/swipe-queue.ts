@@ -33,6 +33,7 @@ export function useSwipeQueue(initialLinks: LinkItem[], filters: SwipeFilters): 
     [snapshot, ratedIds, filters]
   );
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ratedIdsRef is a stable ref; setters are stable dispatch fns
   const rate = useCallback(
     (id: string, rating: "GOOD" | "BAD", opts?: { urgency?: Urgency }) => {
       if (ratedIdsRef.current.has(id)) return;
