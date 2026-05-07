@@ -1,10 +1,31 @@
 import { put, del } from "@vercel/blob";
+import sharp from "sharp";
 import { prisma } from "@/lib/db";
-import { snapsave } from "snapsave-media-downloader";
 import { extractMeta, extractTitleTag } from "@/lib/og";
 import type { MediaAsset } from "@/generated/prisma/client";
 
 const FETCH_TIMEOUT_MS = 30_000;
+
+const BLOB_TOKENS = [
+  process.env.BLOB_READ_WRITE_TOKEN,
+  process.env.BLOB_2_READ_WRITE_TOKEN,
+].filter(Boolean) as string[];
+
+if (BLOB_TOKENS.length === 0) throw new Error("No BLOB_READ_WRITE_TOKEN configured");
+
+let _tokenIndex = 0;
+function nextBlobToken(): string {
+  return BLOB_TOKENS[_tokenIndex++ % BLOB_TOKENS.length];
+}
+
+async function blobPut(...args: Parameters<typeof put>): ReturnType<typeof put> {
+  const [pathname, body, options] = args;
+  return put(pathname, body, { ...options, token: nextBlobToken() });
+}
+
+async function blobDel(urls: string[]): Promise<void> {
+  await Promise.all(BLOB_TOKENS.map((token) => del(urls, { token }).catch(() => {})));
+}
 
 function isInstagramUrl(url: string): boolean {
   return /instagram\.com\/(p|reel|reels|tv)\//.test(url);
@@ -22,13 +43,14 @@ function extFromContentType(ct: string): string {
 // Per-sourceUrl mutex — concurrent calls for the same URL share one in-flight resolve
 const inFlight = new Map<string, Promise<MediaAsset | null>>();
 
-export async function resolveMediaForLink(linkId: string): Promise<MediaAsset | null> {
+export async function resolveMediaForLink(linkId: string, { force = false } = {}): Promise<MediaAsset | null> {
   const link = await prisma.link.findUnique({
     where: { id: linkId },
     include: { mediaAsset: true },
   });
 
-  if (!link || link.rating !== "PENDING") return null;
+  if (!link) return null;
+  if (!force && link.rating !== "PENDING") return null;
 
   // Already resolved and blob URL still set
   if (link.mediaAsset?.blobUrl) return link.mediaAsset;
@@ -50,6 +72,7 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
     let isVideo = false;
 
     if (isInstagramUrl(url)) {
+      const { snapsave } = await import("snapsave-media-downloader");
       const result = await snapsave(url);
       if (!result.success || !result.data?.media?.length) {
         await markFailed(linkId, "snapsave returned no media");
@@ -86,12 +109,30 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
       return null;
     }
 
-    const contentType = dlRes.headers.get("content-type") ?? (isVideo ? "video/mp4" : "image/jpeg");
-    const ext = extFromContentType(contentType);
+    const rawContentType = dlRes.headers.get("content-type") ?? (isVideo ? "video/mp4" : "image/jpeg");
     const id = generateId();
-    const pathname = `media/${id}.${ext}`;
 
-    const { url: blobUrl } = await put(pathname, dlRes.body, {
+    let uploadBody: Buffer | ReadableStream;
+    let contentType: string;
+    let ext: string;
+
+    if (!isVideo) {
+      const raw = Buffer.from(await dlRes.arrayBuffer());
+      const compressed = await sharp(raw)
+        .resize({ width: 1920, height: 1920, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer();
+      uploadBody = compressed;
+      contentType = "image/jpeg";
+      ext = "jpg";
+    } else {
+      uploadBody = dlRes.body!;
+      contentType = rawContentType;
+      ext = extFromContentType(rawContentType);
+    }
+
+    const pathname = `media/${id}.${ext}`;
+    const { url: blobUrl } = await blobPut(pathname, uploadBody, {
       access: "public",
       contentType,
     });
@@ -102,7 +143,12 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
       try {
         const thumbRes = await fetch(thumbnailSourceUrl, { signal: AbortSignal.timeout(10_000) });
         if (thumbRes.ok && thumbRes.body) {
-          const { url: tUrl } = await put(`media/${id}_thumb.jpg`, thumbRes.body, {
+          const thumbRaw = Buffer.from(await thumbRes.arrayBuffer());
+          const thumbCompressed = await sharp(thumbRaw)
+            .resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true })
+            .jpeg({ quality: 80, mozjpeg: true })
+            .toBuffer();
+          const { url: tUrl } = await blobPut(`media/${id}_thumb.jpg`, thumbCompressed, {
             access: "public",
             contentType: "image/jpeg",
           });
@@ -113,8 +159,9 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
       }
     }
 
-    // Approximate size from content-length; fall back to 0
-    const sizeBytes = parseInt(dlRes.headers.get("content-length") ?? "0", 10);
+    const sizeBytes = uploadBody instanceof Buffer
+      ? uploadBody.byteLength
+      : parseInt(dlRes.headers.get("content-length") ?? "0", 10);
 
     const asset = await prisma.$transaction(async (tx) => {
       const created = await tx.mediaAsset.create({
@@ -166,9 +213,7 @@ export async function evictMediaForLink(linkId: string): Promise<void> {
 
   // Best-effort blob deletion
   if (urlsToDelete.length > 0) {
-    await del(urlsToDelete).catch((err) =>
-      console.error(`[media-store] blob delete failed for ${asset.id}:`, err)
-    );
+    await blobDel(urlsToDelete);
   }
 
   await prisma.$transaction([

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { submitLinkSchema } from "@/lib/validations";
 import { categorizeLink } from "@/lib/categorize";
+import { resolveMediaForLink } from "@/lib/media-store";
 
 function validateToken(request: NextRequest): boolean {
   const secret = process.env.API_SECRET;
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
   });
 
   after(() => categorizeLink(link.id));
+  after(() => resolveMediaForLink(link.id));
 
   return NextResponse.json({ success: true, id: link.id }, { status: 201 });
 }
