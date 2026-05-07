@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
-import { type LinkItem, type OgData, type Category } from "@/types/link";
+import { type LinkItem, type Category } from "@/types/link";
+import { MediaCache, type CachedMedia } from "@/lib/media-cache";
 
 export type SwipeCardHandle = {
   triggerSwipe: (direction: "left" | "right") => void;
@@ -21,52 +22,41 @@ const categoryLabels: Record<Category, string> = {
   BREAKFAST: "Breakfast",
 };
 
-const SWIPE_THRESHOLD = 0.3; // 30% of screen width
-const MAX_ROTATION = 15; // degrees
+const SWIPE_THRESHOLD = 0.3;
+const MAX_ROTATION = 15;
 const ROTATION_FACTOR = 0.06;
 
-function isInstagramUrl(url: string): boolean {
-  return /instagram\.com\/(p|reel|reels|tv)\//.test(url);
-}
-
-type MediaData =
-  | { type: "video"; videoUrl: string; thumbnail?: string }
-  | { type: "image"; ogData: OgData }
+type MediaState =
   | { type: "loading" }
+  | { type: "video"; videoUrl: string; thumbnail?: string }
+  | { type: "image"; image: string | null; title: string | null; siteName: string | null }
   | { type: "error" };
 
-function useMediaData(url: string): MediaData {
-  const [data, setData] = useState<MediaData>({ type: "loading" });
+function useCardMedia(link: LinkItem): MediaState {
+  const [state, setState] = useState<MediaState>({ type: "loading" });
 
   useEffect(() => {
     let cancelled = false;
+    setState({ type: "loading" });
+    MediaCache.get(link).then((cached: CachedMedia) => {
+      if (cancelled) return;
+      if (!cached) return setState({ type: "error" });
+      if (cached.type === "video") {
+        return setState({ type: "video", videoUrl: cached.videoUrl, thumbnail: cached.thumbnail });
+      }
+      setState({
+        type: "image",
+        image: cached.ogData.image,
+        title: cached.ogData.title,
+        siteName: cached.ogData.siteName,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [link]);
 
-    if (isInstagramUrl(url)) {
-      fetch(`/api/instagram?url=${encodeURIComponent(url)}`)
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((json) => {
-          if (cancelled) return;
-          const media = json.media?.[0];
-          if (media?.type === "video") {
-            setData({ type: "video", videoUrl: media.url, thumbnail: media.thumbnail });
-          } else if (media?.url) {
-            setData({ type: "image", ogData: { title: null, image: media.url, description: null, siteName: "Instagram" } });
-          } else {
-            setData({ type: "error" });
-          }
-        })
-        .catch(() => !cancelled && setData({ type: "error" }));
-    } else {
-      fetch(`/api/og?url=${encodeURIComponent(url)}`)
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((ogData) => !cancelled && setData({ type: "image", ogData }))
-        .catch(() => !cancelled && setData({ type: "error" }));
-    }
-
-    return () => { cancelled = true; };
-  }, [url]);
-
-  return data;
+  return state;
 }
 
 export const SwipeCard = forwardRef<SwipeCardHandle, {
@@ -82,7 +72,11 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
   const [flying, setFlying] = useState<"left" | "right" | null>(null);
   const [muted, setMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const media = useMediaData(link.url);
+  // Sync imperative video.muted with React state — fixes stale-read bug
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted]);
+  const media = useCardMedia(link);
 
   const screenWidth = typeof window !== "undefined" ? window.innerWidth : 400;
   const threshold = screenWidth * SWIPE_THRESHOLD;
@@ -176,19 +170,18 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
             onClick={(e) => {
               e.stopPropagation();
               setMuted((m) => !m);
-              if (videoRef.current) videoRef.current.muted = !muted;
             }}
           />
         )}
-        {media.type === "image" && media.ogData.image && (
+        {media.type === "image" && media.image && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={media.ogData.image}
-            alt={media.ogData.title || ""}
+            src={media.image}
+            alt={media.title || ""}
             className="w-full h-full object-cover"
           />
         )}
-        {media.type === "image" && !media.ogData.image && (
+        {media.type === "image" && !media.image && (
           <div className="w-full h-full flex flex-col items-center justify-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -197,8 +190,8 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
               className="w-16 h-16 rounded-xl opacity-60"
             />
             <p className="text-sm text-muted-foreground font-medium">{domain}</p>
-            {media.ogData.title && (
-              <p className="text-lg font-semibold text-foreground text-center px-8 line-clamp-3">{media.ogData.title}</p>
+            {media.title && (
+              <p className="text-lg font-semibold text-foreground text-center px-8 line-clamp-3">{media.title}</p>
             )}
           </div>
         )}
@@ -286,7 +279,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
         )}
         <p className="text-[10px] uppercase tracking-[0.15em] text-white/50 font-medium mb-1">{domain}</p>
         <p className="text-base font-semibold text-white line-clamp-2 leading-snug">
-          {(media.type === "image" && media.ogData.title) || link.url}
+          {(media.type === "image" && media.title) || link.url}
         </p>
         <p className="text-xs text-white/40 mt-1.5">
           {submitterName} · {dateStr}
