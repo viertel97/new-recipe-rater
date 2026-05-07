@@ -76,6 +76,7 @@ export const MediaCache = {
       cache.set(link.id, resolveMedia(link));
     }
   },
+  /** Test-only: clears cache. Do not call in production code. */
   _reset(): void {
     cache.clear();
     queue.length = 0;
