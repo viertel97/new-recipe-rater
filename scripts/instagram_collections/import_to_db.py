@@ -28,23 +28,31 @@ ENV_FILE = REPO_ROOT / ".env"
 SUBMITTER_USERNAME = "janik"
 
 
-def trigger_categorize() -> None:
+def _post_admin(endpoint: str, label: str) -> None:
     url = os.environ.get("APP_URL", "http://localhost:3000")
     secret = os.environ.get("API_SECRET")
     if not secret:
-        print("API_SECRET not set, skipping categorization trigger.")
+        print(f"API_SECRET not set, skipping {label}.")
         return
     try:
         req = urllib.request.Request(
-            f"{url}/api/admin/categorize-pending",
+            f"{url}/api/admin/{endpoint}",
             headers={"Authorization": f"Bearer {secret}"},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=30) as res:
             data = json.loads(res.read())
-            print(f"Triggered categorization for {data.get('queued', 0)} pending links.")
+            print(f"Triggered {label} for {data.get('queued', 0)} pending links.")
     except Exception as e:
-        print(f"Warning: failed to trigger categorization: {e}")
+        print(f"Warning: failed to trigger {label}: {e}")
+
+
+def trigger_backfill() -> None:
+    _post_admin("backfill-media", "media backfill")
+
+
+def trigger_categorize() -> None:
+    _post_admin("categorize-pending", "categorization")
 
 
 def load_env() -> None:

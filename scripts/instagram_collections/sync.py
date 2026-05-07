@@ -33,6 +33,7 @@ from import_to_db import (
     load_entries,
     load_env,
     parse_since,
+    trigger_backfill,
     trigger_categorize,
 )
 
@@ -100,6 +101,7 @@ def main() -> int:
 
     inserted = do_import(paths, args.since, args.dry_run)
     if not args.dry_run and inserted > 0:
+        trigger_backfill()
         trigger_categorize()
     return 0
 
