@@ -1,5 +1,3 @@
-"use server";
-
 import { resolveMediaForLink } from "@/lib/media-store";
 
 const MAX_CONCURRENT = 3;
