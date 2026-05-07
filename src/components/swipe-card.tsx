@@ -118,6 +118,17 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
 
   const isNonVideoCard = media.type === "image" || media.type === "error";
 
+  // Control video playback imperatively — back card stays paused until promoted
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (active) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [active]);
+
   const rotation = Math.min(MAX_ROTATION, Math.max(-MAX_ROTATION, deltaX * ROTATION_FACTOR));
   const stampOpacity = Math.min(1, Math.abs(deltaX) / threshold);
   const isRight = deltaX > 0;
@@ -162,15 +173,10 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
             ref={videoRef}
             src={media.videoUrl}
             poster={media.thumbnail}
-            autoPlay
             muted={muted}
             playsInline
             loop
             className="w-full h-full object-cover"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMuted((m) => !m);
-            }}
           />
         )}
         {media.type === "image" && media.image && (
@@ -226,9 +232,9 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
           href={link.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute inset-0 z-5"
+          className="absolute inset-0"
+          style={{ zIndex: 5 }}
           onClick={(e) => {
-            // Only open link on tap, not after drag
             if (Math.abs(deltaX) > 5) e.preventDefault();
           }}
         />
@@ -243,10 +249,14 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
         }}
       />
 
-      {/* Mute indicator */}
-      {media.type === "video" && (
-        <div className="absolute top-4 right-4 z-20 pointer-events-none">
-          <div className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+      {/* Top-right controls */}
+      <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+        {media.type === "video" && (
+          <button
+            className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+            onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
             {muted ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="w-4 h-4">
                 <path d="M11 5L6 9H2v6h4l5 4V5z" />
@@ -259,9 +269,23 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
               </svg>
             )}
-          </div>
-        </div>
-      )}
+          </button>
+        )}
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Open link"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="w-4 h-4">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </a>
+      </div>
 
       {/* Recipe info overlay */}
       <div className="absolute bottom-20 left-0 right-0 px-5 z-10 pointer-events-none">
