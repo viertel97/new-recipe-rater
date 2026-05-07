@@ -35,7 +35,40 @@ model Link {
   submittedBy   User   @relation(fields: [submittedById], references: [id])
   submittedById String
 
+  mediaAssetId  String?     @unique
+  mediaAsset    MediaAsset? @relation(fields: [mediaAssetId], references: [id])
+  mediaStatus   MediaStatus @default(PENDING)
+  mediaError    String?
+
   @@index([categoryStatus])
+  @@index([mediaStatus])
+}
+
+model MediaAsset {
+  id            String    @id @default(cuid())
+  sourceUrl     String    @unique
+  type          MediaType
+  localPath     String
+  contentType   String
+  sizeBytes     Int
+  thumbnailPath String?
+  title         String?
+  description   String?
+  fetchedAt     DateTime  @default(now())
+
+  link Link?
+}
+
+enum MediaType {
+  VIDEO
+  IMAGE
+}
+
+enum MediaStatus {
+  PENDING
+  RESOLVED
+  FAILED
+  EVICTED
 }
 
 enum Rating {

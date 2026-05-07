@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { submitLinkSchema, rateLinkSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { Rating, Urgency, Category } from "@/generated/prisma/client";
+import { scheduleMediaResolution } from "@/lib/media-resolver";
+import { evictMediaForLink } from "@/lib/media-store";
 
 const SOCIAL_MEDIA_DOMAINS = new Set([
   "instagram.com",
@@ -43,13 +45,15 @@ export async function submitLink(formData: FormData) {
     return { error: "This link has already been submitted" };
   }
 
-  await prisma.link.create({
+  const link = await prisma.link.create({
     data: {
       url: parsed.data.url,
       notes: parsed.data.notes,
       submittedById: session.user.id,
     },
   });
+
+  scheduleMediaResolution(link.id);
 
   revalidatePath("/");
   return { success: true };
@@ -307,6 +311,11 @@ export async function rateLink(
       reviewNote: parsed.data.reviewNote ?? null,
     },
   });
+
+  // Best-effort eviction — don't let failure block the rating
+  evictMediaForLink(linkId).catch((err) =>
+    console.error(`[rateLink] eviction failed for ${linkId}:`, err)
+  );
 
   revalidatePath("/");
   return { success: true };

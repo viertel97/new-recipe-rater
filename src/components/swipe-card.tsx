@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
-import { type LinkItem, type Category } from "@/types/link";
+import { type LinkItem, type Category, type MediaAsset } from "@/types/link";
 import { MediaCache, type CachedMedia } from "@/lib/media-cache";
 
 export type SwipeCardHandle = {
@@ -32,10 +32,29 @@ type MediaState =
   | { type: "image"; image: string | null; title: string | null; siteName: string | null }
   | { type: "error" };
 
+function mediaAssetToState(asset: MediaAsset): MediaState {
+  if (asset.type === "VIDEO") {
+    return {
+      type: "video",
+      videoUrl: `/api/media/${asset.id}`,
+      thumbnail: asset.thumbnailPath ? `/api/media-thumb/${asset.id}` : undefined,
+    };
+  }
+  return { type: "image", image: `/api/media/${asset.id}`, title: asset.title, siteName: null };
+}
+
 function useCardMedia(link: LinkItem): MediaState {
-  const [state, setState] = useState<MediaState>({ type: "loading" });
+  // If server already resolved media, use it directly — no client fetch needed
+  const initialState: MediaState = link.mediaAsset
+    ? mediaAssetToState(link.mediaAsset)
+    : { type: "loading" };
+
+  const [state, setState] = useState<MediaState>(initialState);
 
   useEffect(() => {
+    // Already have resolved media from server
+    if (link.mediaAsset) return;
+
     let cancelled = false;
     setState({ type: "loading" });
     MediaCache.get(link).then((cached: CachedMedia) => {
