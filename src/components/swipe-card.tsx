@@ -71,6 +71,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
   const [deltaX, setDeltaX] = useState(0);
   const [flying, setFlying] = useState<"left" | "right" | null>(null);
   const [muted, setMuted] = useState(true);
+  const [playing, setPlaying] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   // Sync imperative video.muted with React state — fixes stale-read bug
   useEffect(() => {
@@ -122,12 +123,12 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (active) {
+    if (active && playing) {
       video.play().catch(() => {});
     } else {
       video.pause();
     }
-  }, [active]);
+  }, [active, playing, media]); // media dep: re-run when video element mounts after async load
 
   const rotation = Math.min(MAX_ROTATION, Math.max(-MAX_ROTATION, deltaX * ROTATION_FACTOR));
   const stampOpacity = Math.min(1, Math.abs(deltaX) / threshold);
@@ -177,6 +178,8 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
             playsInline
             loop
             className="w-full h-full object-cover"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setPlaying((p) => !p); }}
           />
         )}
         {media.type === "image" && media.image && (
@@ -250,10 +253,11 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
       />
 
       {/* Top-right controls */}
-      <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+      <div className="absolute top-16 right-4 z-20 flex flex-col gap-2">
         {media.type === "video" && (
           <button
             className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
             aria-label={muted ? "Unmute" : "Mute"}
           >
@@ -276,6 +280,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
           target="_blank"
           rel="noopener noreferrer"
           className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           aria-label="Open link"
         >
