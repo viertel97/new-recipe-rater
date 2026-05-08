@@ -43,10 +43,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - github-webhook.viertel-it.de
+        - new-recipe-rater.viertel-it.de
       secretName: tls.new-recipe-rater
   rules:
-    - host: github-webhook.viertel-it.de
+    - host: new-recipe-rater.viertel-it.de
       http:
         paths:
           - path: /
