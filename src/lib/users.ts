@@ -25,7 +25,16 @@ export async function ensureUsers() {
     }
 
     const existing = await prisma.user.findUnique({ where: { username } });
-    if (existing) continue;
+
+    if (existing) {
+      const passwordMatch = await bcrypt.compare(password, existing.password);
+      if (!passwordMatch) {
+        const hashed = await bcrypt.hash(password, 10);
+        await prisma.user.update({ where: { username }, data: { password: hashed } });
+        console.log(`Updated password for user: ${username}`);
+      }
+      continue;
+    }
 
     const hashed = await bcrypt.hash(password, 10);
     await prisma.user.create({
