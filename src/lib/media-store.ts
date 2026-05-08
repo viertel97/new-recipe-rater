@@ -1,30 +1,15 @@
-import { put, del } from "@vercel/blob";
+import fs from "fs/promises";
+import path from "path";
 import sharp from "sharp";
 import { prisma } from "@/lib/db";
 import { extractMeta, extractTitleTag } from "@/lib/og";
 import type { MediaAsset } from "@/generated/prisma/client";
 
 const FETCH_TIMEOUT_MS = 30_000;
+const MEDIA_DIR = process.env.MEDIA_DIR ?? "/data/media";
 
-const BLOB_TOKENS = [
-  process.env.BLOB_READ_WRITE_TOKEN,
-  process.env.BLOB_2_READ_WRITE_TOKEN,
-].filter(Boolean) as string[];
-
-if (BLOB_TOKENS.length === 0) throw new Error("No BLOB_READ_WRITE_TOKEN configured");
-
-let _tokenIndex = 0;
-function nextBlobToken(): string {
-  return BLOB_TOKENS[_tokenIndex++ % BLOB_TOKENS.length];
-}
-
-async function blobPut(...args: Parameters<typeof put>): ReturnType<typeof put> {
-  const [pathname, body, options] = args;
-  return put(pathname, body, { ...options, token: nextBlobToken() });
-}
-
-async function blobDel(urls: string[]): Promise<void> {
-  await Promise.all(BLOB_TOKENS.map((token) => del(urls, { token }).catch(() => {})));
+async function ensureMediaDir(): Promise<void> {
+  await fs.mkdir(MEDIA_DIR, { recursive: true });
 }
 
 function isInstagramUrl(url: string): boolean {
@@ -40,6 +25,43 @@ function extFromContentType(ct: string): string {
   return "bin";
 }
 
+async function localPut(
+  pathname: string,
+  body: Buffer | ReadableStream<Uint8Array>,
+): Promise<{ url: string }> {
+  await ensureMediaDir();
+  const filename = path.basename(pathname);
+  const filePath = path.join(MEDIA_DIR, filename);
+
+  if (body instanceof Buffer) {
+    await fs.writeFile(filePath, body);
+  } else {
+    const reader = (body as ReadableStream<Uint8Array>).getReader();
+    const chunks: Buffer[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(Buffer.from(value));
+    }
+    await fs.writeFile(filePath, Buffer.concat(chunks));
+  }
+
+  return { url: `/media/${filename}` };
+}
+
+async function localDel(urls: string[]): Promise<void> {
+  await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const filename = path.basename(url);
+        await fs.unlink(path.join(MEDIA_DIR, filename));
+      } catch {
+        // best-effort
+      }
+    }),
+  );
+}
+
 // Per-sourceUrl mutex — concurrent calls for the same URL share one in-flight resolve
 const inFlight = new Map<string, Promise<MediaAsset | null>>();
 
@@ -52,7 +74,7 @@ export async function resolveMediaForLink(linkId: string, { force = false } = {}
   if (!link) return null;
   if (!force && link.rating !== "PENDING") return null;
 
-  // Already resolved and blob URL still set
+  // Already resolved and URL still set
   if (link.mediaAsset?.blobUrl) return link.mediaAsset;
 
   const existing = inFlight.get(link.url);
@@ -112,7 +134,7 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
     const rawContentType = dlRes.headers.get("content-type") ?? (isVideo ? "video/mp4" : "image/jpeg");
     const id = generateId();
 
-    let uploadBody: Buffer | ReadableStream;
+    let uploadBody: Buffer | ReadableStream<Uint8Array>;
     let contentType: string;
     let ext: string;
 
@@ -132,10 +154,7 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
     }
 
     const pathname = `media/${id}.${ext}`;
-    const { url: blobUrl } = await blobPut(pathname, uploadBody, {
-      access: "public",
-      contentType,
-    });
+    const { url: blobUrl } = await localPut(pathname, uploadBody);
 
     // Upload thumbnail best-effort
     let thumbnailUrl: string | undefined;
@@ -148,10 +167,7 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
             .resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true })
             .jpeg({ quality: 80, mozjpeg: true })
             .toBuffer();
-          const { url: tUrl } = await blobPut(`media/${id}_thumb.jpg`, thumbCompressed, {
-            access: "public",
-            contentType: "image/jpeg",
-          });
+          const { url: tUrl } = await localPut(`media/${id}_thumb.jpg`, thumbCompressed);
           thumbnailUrl = tUrl;
         }
       } catch {
@@ -208,14 +224,17 @@ export async function resetStaleBlobAssets(): Promise<number> {
 
   const staleIds: string[] = [];
   for (const asset of assets) {
-    if (!asset.blobUrl.startsWith("https://")) {
+    if (!asset.blobUrl.startsWith("/media/")) {
+      // Old Vercel blob URL or invalid — mark stale
       staleIds.push(asset.id);
       continue;
     }
+    const filename = path.basename(asset.blobUrl);
     try {
-      const res = await fetch(asset.blobUrl, { method: "HEAD" });
-      if (res.status === 404) staleIds.push(asset.id);
-    } catch {}
+      await fs.access(path.join(MEDIA_DIR, filename));
+    } catch {
+      staleIds.push(asset.id);
+    }
   }
 
   if (staleIds.length === 0) return 0;
@@ -241,9 +260,8 @@ export async function evictMediaForLink(linkId: string): Promise<void> {
   const asset = link.mediaAsset;
   const urlsToDelete = [asset.blobUrl, asset.thumbnailUrl].filter(Boolean) as string[];
 
-  // Best-effort blob deletion
   if (urlsToDelete.length > 0) {
-    await blobDel(urlsToDelete);
+    await localDel(urlsToDelete);
   }
 
   await prisma.$transaction([

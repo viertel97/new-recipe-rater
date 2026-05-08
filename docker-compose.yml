@@ -9,6 +9,11 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      MEDIA_DIR: /data/media
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - ./data/media:/data/media
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 10s
