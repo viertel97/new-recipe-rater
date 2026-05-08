@@ -14,24 +14,38 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        await ensureUsers();
+        try {
+          await ensureUsers();
 
-        const login = credentials?.username as string;
-        const password = credentials?.password as string;
+          const login = credentials?.username as string;
+          const password = credentials?.password as string;
 
-        if (!login || !password) return null;
+          if (!login || !password) {
+            console.log("[auth] missing credentials");
+            return null;
+          }
 
-        // Try finding by username first, then by email
-        const user =
-          (await prisma.user.findUnique({ where: { username: login } })) ??
-          (await prisma.user.findUnique({ where: { email: login } }));
+          const user =
+            (await prisma.user.findUnique({ where: { username: login } })) ??
+            (await prisma.user.findUnique({ where: { email: login } }));
 
-        if (!user) return null;
+          if (!user) {
+            console.log("[auth] user not found:", login);
+            return null;
+          }
 
-        const isValid = await bcrypt.compare(password, user.password);
-        if (!isValid) return null;
+          const isValid = await bcrypt.compare(password, user.password);
+          if (!isValid) {
+            console.log("[auth] wrong password for:", login);
+            return null;
+          }
 
-        return { id: user.id, email: user.email ?? user.username, name: user.name };
+          console.log("[auth] login ok:", login);
+          return { id: user.id, email: user.email ?? user.username, name: user.name };
+        } catch (err) {
+          console.error("[auth] authorize threw:", err);
+          return null;
+        }
       },
     }),
   ],
