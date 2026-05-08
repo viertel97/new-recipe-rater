@@ -3,7 +3,7 @@
 import { useState, useOptimistic, useEffect, useCallback, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
 import { rateLink, resetRating, importToTandoor, setCategory } from "@/lib/actions";
-import { type Urgency, type LinkItem, type OgData, type Category } from "@/types/link";
+import { type Urgency, type LinkItem, type OgData, type Category, type MediaAsset } from "@/types/link";
 
 function getPostId(url: string): string | null {
   const match = url.match(/instagram\.com\/(?:p|reel|reels|tv)\/([\w-]+)/);
@@ -12,6 +12,39 @@ function getPostId(url: string): string | null {
 
 function isInstagramUrl(url: string): boolean {
   return /instagram\.com\/(p|reel|reels|tv)\//.test(url);
+}
+
+function MediaPreview({ asset, url }: { asset: MediaAsset; url: string }) {
+  const imgSrc = asset.type === "VIDEO" ? (asset.thumbnailUrl ?? asset.blobUrl) : asset.blobUrl;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block relative overflow-hidden bg-background/30 group"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={imgSrc}
+        alt={asset.title || ""}
+        className="w-full object-cover max-h-[220px] sm:max-h-[300px] group-hover:scale-[1.02] transition-transform duration-300"
+      />
+      {asset.type === "VIDEO" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 opacity-70 group-hover:opacity-100 transition-opacity">
+            <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5 ml-0.5">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      )}
+      {asset.title && (
+        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8">
+          <p className="text-sm font-medium text-white/90 line-clamp-2">{asset.title}</p>
+        </div>
+      )}
+    </a>
+  );
 }
 
 function OgPreview({ url }: { url: string }) {
@@ -394,11 +427,13 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
 
   return (
     <div className="glass-card rounded-xl overflow-hidden">
-      {/* Preview — Instagram embed or OG thumbnail */}
-      {isInsta && postId ? (
+      {/* Preview — local media asset, Instagram embed, or OG thumbnail */}
+      {link.mediaAsset ? (
+        <MediaPreview asset={link.mediaAsset} url={link.url} />
+      ) : isInsta && postId ? (
         <>
           <div
-            className="relative aspect-square max-h-[400px] overflow-hidden bg-background/30 cursor-pointer group"
+            className="relative aspect-square max-h-[220px] sm:max-h-[360px] overflow-hidden bg-background/30 cursor-pointer group"
             onClick={() => {
               if (window.innerWidth < 768) {
                 window.open(link.url, "_blank");
@@ -456,6 +491,7 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
               {new Date(link.createdAt).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
+                timeZone: "UTC",
               })}
             </p>
           </div>

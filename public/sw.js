@@ -4,9 +4,6 @@ const RUNTIME = `runtime-${SW_VERSION}`;
 const MAX_RUNTIME_ENTRIES = 200;
 
 const PRECACHE_URLS = [
-  "/",
-  "/swipe",
-  "/add",
   "/offline",
   "/manifest.webmanifest",
 ];
@@ -48,8 +45,8 @@ self.addEventListener("fetch", (event) => {
 
   if (request.method !== "GET") return;
 
-  // Cache public Vercel Blob media (cross-origin)
-  if (url.hostname.endsWith(".public.blob.vercel-storage.com")) {
+  // Cache local media files — immutable once written
+  if (url.pathname.startsWith("/media/")) {
     event.respondWith(cacheFirst(request, RUNTIME));
     return;
   }

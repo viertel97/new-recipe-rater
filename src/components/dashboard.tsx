@@ -119,6 +119,7 @@ export function Dashboard({
   const [categories, setCategories] = useState<Set<Category>>(new Set());
   const [urgencies, setUrgencies] = useState<Set<Urgency>>(new Set());
   const [tandoorOnly, setTandoorOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   /* ── Filtering ── */
   const filtered = useMemo(() => {
@@ -197,96 +198,118 @@ export function Dashboard({
   return (
     <div className="space-y-5">
       {/* ── Filter bar ── */}
-      <div className="glass-card rounded-xl p-4 space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <div className="glass-card rounded-xl overflow-hidden">
+        {/* Toggle header */}
+        <button
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3"
+        >
           <p className="text-[11px] uppercase tracking-[0.15em] font-semibold text-muted-foreground/60">
             Filters
             {hasActiveFilters && (
               <span className="ml-2 text-coral">· {filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
             )}
+            {!filtersOpen && !hasActiveFilters && (
+              <span className="ml-2 opacity-40">{links.length}</span>
+            )}
           </p>
-          {hasActiveFilters && (
-            <button
-              onClick={() => {
-                setRatings(new Set());
-                setCategories(new Set());
-                setUrgencies(new Set());
-                setTandoorOnly(false);
-              }}
-              className="text-[11px] font-medium text-muted-foreground/60 hover:text-red-400 transition-colors"
-            >
-              Reset all
-            </button>
-          )}
-        </div>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="w-4 h-4 text-muted-foreground/40 transition-transform duration-200"
+            style={{ transform: filtersOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
 
-        {/* Rating */}
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">Status</p>
-          <div className="flex flex-wrap gap-1.5">
-            {RATING_OPTIONS.map((r) => (
-              <FilterChip
-                key={r}
-                label={RATING_META[r].label}
-                count={ratingCounts[r]}
-                selected={ratings.has(r)}
-                onClick={() => setRatings((s) => toggle(s, r))}
-                color={RATING_META[r].color}
-                size="sm"
-              />
-            ))}
+        {filtersOpen && (
+          <div className="px-4 pb-4 space-y-4 border-t border-border/20">
+            {/* Rating */}
+            <div className="pt-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">Status</p>
+              <div className="flex flex-wrap gap-1.5">
+                {RATING_OPTIONS.map((r) => (
+                  <FilterChip
+                    key={r}
+                    label={RATING_META[r].label}
+                    count={ratingCounts[r]}
+                    selected={ratings.has(r)}
+                    onClick={() => setRatings((s) => toggle(s, r))}
+                    color={RATING_META[r].color}
+                    size="sm"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Category */}
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">Category</p>
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORY_OPTIONS.map((c) => (
+                  <FilterChip
+                    key={c}
+                    label={CATEGORY_META[c].label}
+                    count={categoryCounts[c]}
+                    selected={categories.has(c)}
+                    onClick={() => setCategories((s) => toggle(s, c))}
+                    color={CATEGORY_META[c].color}
+                    size="sm"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Urgency */}
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">When to make</p>
+              <div className="flex flex-wrap gap-1.5">
+                {URGENCY_OPTIONS.map((u) => (
+                  <FilterChip
+                    key={u}
+                    label={URGENCY_META[u].label}
+                    count={urgencyCounts[u]}
+                    selected={urgencies.has(u)}
+                    onClick={() => setUrgencies((s) => toggle(s, u))}
+                    color={URGENCY_META[u].color}
+                    size="sm"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Tandoor + reset row */}
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">Location</p>
+                <FilterChip
+                  label="In Tandoor"
+                  count={tandoorCount}
+                  selected={tandoorOnly}
+                  onClick={() => setTandoorOnly((v) => !v)}
+                  color="oklch(0.65 0.12 145)"
+                  size="sm"
+                />
+              </div>
+              {hasActiveFilters && (
+                <button
+                  onClick={() => {
+                    setRatings(new Set());
+                    setCategories(new Set());
+                    setUrgencies(new Set());
+                    setTandoorOnly(false);
+                  }}
+                  className="text-[11px] font-medium text-muted-foreground/60 hover:text-red-400 transition-colors self-end pb-0.5"
+                >
+                  Reset all
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-
-        {/* Category */}
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">Category</p>
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORY_OPTIONS.map((c) => (
-              <FilterChip
-                key={c}
-                label={CATEGORY_META[c].label}
-                count={categoryCounts[c]}
-                selected={categories.has(c)}
-                onClick={() => setCategories((s) => toggle(s, c))}
-                color={CATEGORY_META[c].color}
-                size="sm"
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Urgency */}
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">When to make</p>
-          <div className="flex flex-wrap gap-1.5">
-            {URGENCY_OPTIONS.map((u) => (
-              <FilterChip
-                key={u}
-                label={URGENCY_META[u].label}
-                count={urgencyCounts[u]}
-                selected={urgencies.has(u)}
-                onClick={() => setUrgencies((s) => toggle(s, u))}
-                color={URGENCY_META[u].color}
-                size="sm"
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Tandoor toggle */}
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground/40 mb-1.5">Location</p>
-          <FilterChip
-            label="In Tandoor"
-            count={tandoorCount}
-            selected={tandoorOnly}
-            onClick={() => setTandoorOnly((v) => !v)}
-            color="oklch(0.65 0.12 145)"
-            size="sm"
-          />
-        </div>
+        )}
       </div>
 
       {/* ── Cards grid ── */}

@@ -81,12 +81,16 @@ function useCardMedia(link: LinkItem): MediaState {
 export const SwipeCard = forwardRef<SwipeCardHandle, {
   link: LinkItem;
   onSwipe: (direction: "left" | "right") => void;
+  onNavigate?: (direction: "prev" | "next") => void;
   active: boolean;
-}>(function SwipeCard({ link, onSwipe, active }, ref) {
+  hasPrev?: boolean;
+}>(function SwipeCard({ link, onSwipe, onNavigate, active, hasPrev }, ref) {
   const cardRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const startX = useRef(0);
+  const startY = useRef(0);
   const currentX = useRef(0);
+  const navFiredRef = useRef(false);
   const [deltaX, setDeltaX] = useState(0);
   const [flying, setFlying] = useState<"left" | "right" | null>(null);
   const [muted, setMuted] = useState(true);
@@ -112,7 +116,9 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (!active || flying) return;
     dragging.current = true;
+    navFiredRef.current = false;
     startX.current = e.clientX;
+    startY.current = e.clientY;
     currentX.current = e.clientX;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }, [active, flying]);
@@ -123,10 +129,29 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
     setDeltaX(currentX.current - startX.current);
   }, []);
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
     if (!dragging.current) return;
     dragging.current = false;
     const dx = currentX.current - startX.current;
+    const dy = e.clientY - startY.current;
+
+    // Tap detection (minimal movement)
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && onNavigate) {
+      const tapX = startX.current;
+      const w = typeof window !== "undefined" ? window.innerWidth : 400;
+      if (tapX < w * 0.35) {
+        navFiredRef.current = true;
+        setDeltaX(0);
+        onNavigate("prev");
+        return;
+      }
+      if (tapX > w * 0.65) {
+        navFiredRef.current = true;
+        setDeltaX(0);
+        onNavigate("next");
+        return;
+      }
+    }
 
     if (Math.abs(dx) > threshold) {
       const direction = dx > 0 ? "right" : "left";
@@ -135,7 +160,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
     } else {
       setDeltaX(0);
     }
-  }, [threshold, onSwipe]);
+  }, [threshold, onSwipe, onNavigate]);
 
   const triggerSwipe = useCallback((direction: "left" | "right") => {
     setFlying(direction);
@@ -192,7 +217,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerCancel={(e) => handlePointerUp(e)}
     >
       {/* Background layer */}
       <div className="absolute inset-0 bg-background overflow-hidden">
@@ -206,7 +231,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
             loop
             className="w-full h-full object-cover"
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); setPlaying((p) => !p); }}
+            onClick={(e) => { e.stopPropagation(); if (navFiredRef.current) { navFiredRef.current = false; return; } setPlaying((p) => !p); }}
             onTimeUpdate={() => {
               const v = videoRef.current;
               if (v && v.duration > 0) setVideoProgress(v.currentTime / v.duration);
@@ -263,18 +288,22 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
         />
       )}
 
-      {/* Tap-to-open for non-video cards */}
-      {isNonVideoCard && (
-        <a
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute inset-0"
-          style={{ zIndex: 5 }}
-          onClick={(e) => {
-            if (Math.abs(deltaX) > 5) e.preventDefault();
-          }}
-        />
+      {/* Navigation tap-zone hints */}
+      {active && onNavigate && (
+        <>
+          {hasPrev && (
+            <div className="absolute left-0 top-0 bottom-0 w-12 z-[6] flex items-center justify-start pl-2 pointer-events-none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" className="w-5 h-5 opacity-30">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </div>
+          )}
+          <div className="absolute right-0 top-0 bottom-0 w-12 z-[6] flex items-center justify-end pr-2 pointer-events-none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" className="w-5 h-5 opacity-30">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </>
       )}
 
       {/* Gradient overlay */}
@@ -286,11 +315,11 @@ export const SwipeCard = forwardRef<SwipeCardHandle, {
         }}
       />
 
-      {/* Video progress bar */}
+      {/* Video progress bar — sits above the action buttons */}
       {media.type === "video" && videoDuration > 0 && (
         <div
-          className="absolute left-0 right-0 z-20"
-          style={{ bottom: 0, height: 20, paddingBottom: 6 }}
+          className="absolute left-4 right-4 z-20"
+          style={{ bottom: "calc(max(24px, env(safe-area-inset-bottom)) + 80px)", height: 20, paddingBottom: 6 }}
           onPointerDown={(e) => {
             e.stopPropagation();
             progressSeekingRef.current = true;

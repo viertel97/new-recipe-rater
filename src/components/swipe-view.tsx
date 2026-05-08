@@ -11,7 +11,7 @@ import { SwipeFilterSheet } from "@/components/swipe-filter-sheet";
 
 export function SwipeView({ links }: { links: LinkItem[] }) {
   const { filters, apply: applyFilters, reset: resetFilters, activeCount: filterCount } = useSwipeFilters();
-  const { active, next, remaining, stats, rate } = useSwipeQueue(links, filters);
+  const { active, next, remaining, cursor, stats, rate, navigateNext, navigatePrev } = useSwipeQueue(links, filters);
   const [showUrgency, setShowUrgency] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -147,7 +147,7 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
         </a>
 
         <span className="text-xs text-white/50 font-medium bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
-          {remaining} left
+          {cursor + 1} / {remaining}
         </span>
 
         {/* Filter button */}
@@ -180,6 +180,8 @@ export function SwipeView({ links }: { links: LinkItem[] }) {
             ref={activeCardRef}
             link={active}
             onSwipe={handleSwipe}
+            onNavigate={(dir) => dir === "next" ? navigateNext() : navigatePrev()}
+            hasPrev={cursor > 0}
             active={!anySheetOpen}
           />
         )}
