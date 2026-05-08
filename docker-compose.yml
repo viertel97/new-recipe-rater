@@ -10,6 +10,33 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U instarater"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://instarater:instarater@db:5432/instarater?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   ig-sync:
     build:
@@ -17,14 +44,17 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgresql://instarater:instarater@db:5432/instarater?schema=public
       IG_USERNAME: ${IG_USERNAME}
       IG_PASSWORD: ${IG_PASSWORD}
-      APP_URL: ${APP_URL:-http://host.docker.internal:3000}
+      APP_URL: ${APP_URL:-http://app:3000}
       API_SECRET: ${API_SECRET}
       DATA_DIR: /data
     volumes:
       - ./data/ig-sync:/data
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:
