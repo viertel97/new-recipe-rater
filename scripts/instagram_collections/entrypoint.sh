@@ -9,9 +9,12 @@ run_sync() {
 # Run immediately on container start
 run_sync
 
-# Then keep running every 6 hours
+# Then keep running every ~6 hours (+/- JITTER_PERCENT%)
 while true; do
-    echo "[$(date -Iseconds)] Sleeping for 6 hours..."
-    sleep 6h
+    SLEEP_SECONDS=$(awk -v base=21600 -v pct="${JITTER_PERCENT:-20}" 'BEGIN{
+        srand(); min=base*(100-pct)/100; range=base*pct*2/100; print int(min+rand()*range)
+    }')
+    echo "[$(date -Iseconds)] Sleeping for ${SLEEP_SECONDS}s (~6h ±${JITTER_PERCENT:-20}%)..."
+    sleep "$SLEEP_SECONDS"
     run_sync
 done
