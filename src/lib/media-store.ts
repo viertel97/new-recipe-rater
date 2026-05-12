@@ -195,12 +195,39 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
       });
       await tx.link.update({
         where: { id: linkId },
-        data: { mediaAssetId: id, mediaStatus: "RESOLVED" },
+        data: {
+          mediaAssetId: id,
+          mediaStatus: "RESOLVED",
+          ...(description ? { notes: description.slice(0, 500) } : {}),
+        },
       });
       return created;
     });
 
     console.log(`[media-store] resolved sourceUrl=${url} type=${asset.type} size=${sizeBytes} id=${id}`);
+
+    // Best-effort notes scrape for Instagram
+    if (isInstagramUrl(url)) {
+      try {
+        const { scrapeSocialMediaPost } = await import("@/lib/scrape-social");
+        const scraped = await scrapeSocialMediaPost(url);
+        if (scraped.description) {
+          await prisma.link.update({
+            where: { id: linkId },
+            data: { notes: scraped.description.slice(0, 500) },
+          });
+          console.log(`[media-store] notes scraped for ${url}: "${scraped.description.slice(0, 80)}"`);
+        } else {
+          console.log(`[media-store] no description scraped for ${url}`);
+        }
+      } catch (err) {
+        console.error(
+          `[media-store] notes scrape failed (non-fatal) for ${url}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
     return asset;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
