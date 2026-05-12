@@ -86,28 +86,16 @@ export async function scrapeSocialMediaPost(
       await page.waitForTimeout(1000);
 
       result = await page.evaluate(() => {
-        const descriptions: string[] = [];
+        const domDescriptions: string[] = [];
+        const ogDescriptions: string[] = [];
 
-        // Try OG meta tags
-        const ogSelectors = [
-          "meta[property='og:description']",
-          "meta[property='twitter:description']",
-          "meta[property='og:title']",
-        ];
-        for (const s of ogSelectors) {
-          const el = document.querySelector(s) as HTMLMetaElement | null;
-          if (el?.content) descriptions.push(el.content);
-        }
-
-        // For Instagram: get the visible caption text from the DOM (longer than OG tag)
+        // DOM content first (preferred — expanded caption after "more" click)
         if (window.location.hostname.includes("instagram")) {
-          // Caption is typically in an h1 element or a span inside the article
           const h1 = document.querySelector("h1");
           if (h1?.textContent && h1.textContent.length > 50) {
-            descriptions.push(h1.textContent);
+            domDescriptions.push(h1.textContent);
           }
 
-          // Also try: longest span inside an article element
           const article = document.querySelector("article");
           if (article) {
             const spans = article.querySelectorAll("span");
@@ -117,12 +105,24 @@ export async function scrapeSocialMediaPost(
               if (text.length > longest.length) longest = text;
             });
             if (longest.length > 50) {
-              descriptions.push(longest);
+              domDescriptions.push(longest);
             }
           }
         }
 
-        // Pick the longest description (most complete caption)
+        // OG meta tags as fallback (contain "X likes, Y comments - user: caption" prefix)
+        const ogSelectors = [
+          "meta[property='og:description']",
+          "meta[property='twitter:description']",
+          "meta[property='og:title']",
+        ];
+        for (const s of ogSelectors) {
+          const el = document.querySelector(s) as HTMLMetaElement | null;
+          if (el?.content) ogDescriptions.push(el.content);
+        }
+
+        // Prefer DOM content (clean expanded caption); fall back to OG meta
+        const descriptions = domDescriptions.length > 0 ? domDescriptions : ogDescriptions;
         descriptions.sort((a, b) => b.length - a.length);
 
         let imageURL: string | null = null;
