@@ -207,13 +207,13 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
     console.log(`[media-store] resolved sourceUrl=${url} type=${asset.type} size=${sizeBytes} id=${id}`);
 
     // Best-effort notes scrape for Instagram
-    if (isInstagramUrl(url)) {
+    if (isInstagramUrl(url) && process.env.BROWSERLESS_API_KEY) {
       try {
         const { scrapeSocialMediaPost } = await import("@/lib/scrape-social");
         const scraped = await scrapeSocialMediaPost(url);
         if (scraped.description) {
-          await prisma.link.update({
-            where: { id: linkId },
+          await prisma.link.updateMany({
+            where: { id: linkId, notes: null },
             data: { notes: scraped.description.slice(0, 500) },
           });
           console.log(`[media-store] notes scraped for ${url}: "${scraped.description.slice(0, 80)}"`);
