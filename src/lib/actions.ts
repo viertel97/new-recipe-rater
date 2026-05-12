@@ -31,7 +31,6 @@ export async function submitLink(formData: FormData) {
 
   const parsed = submitLinkSchema.safeParse({
     url: formData.get("url"),
-    notes: formData.get("notes") || undefined,
   });
 
   if (!parsed.success) {
@@ -48,7 +47,6 @@ export async function submitLink(formData: FormData) {
   const link = await prisma.link.create({
     data: {
       url: parsed.data.url,
-      notes: parsed.data.notes,
       submittedById: session.user.id,
     },
   });

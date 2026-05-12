@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { submitLink } from "@/lib/actions";
 
 export function SubmitLinkForm() {
@@ -73,13 +72,6 @@ export function SubmitLinkForm() {
           )}
         </button>
       </div>
-      <Textarea
-        id="notes"
-        name="notes"
-        placeholder="Add a note (optional)..."
-        rows={2}
-        className="bg-background/50 border-border/60 resize-none text-sm"
-      />
     </form>
   );
 }
