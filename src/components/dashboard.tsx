@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { LinkCard } from "@/components/link-card";
 import { type LinkItem, type Category, type Urgency } from "@/types/link";
+import { searchLinks } from "@/lib/search-links";
 
 /* ── Filter configs ─────────────────────────────────────────────── */
 
@@ -120,10 +121,16 @@ export function Dashboard({
   const [urgencies, setUrgencies] = useState<Set<Urgency>>(new Set());
   const [tandoorOnly, setTandoorOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   /* ── Filtering ── */
+  const searchedLinks = useMemo(
+    () => searchLinks(links, searchQuery),
+    [links, searchQuery],
+  );
+
   const filtered = useMemo(() => {
-    let out = links;
+    let out = searchedLinks;
 
     if (ratings.size > 0) {
       out = out.filter((l) => ratings.has(l.rating as RatingOpt));
@@ -139,12 +146,12 @@ export function Dashboard({
     }
 
     return out;
-  }, [links, ratings, categories, urgencies, tandoorOnly]);
+  }, [searchedLinks, ratings, categories, urgencies, tandoorOnly]);
 
   /* ── Dynamic counts (computed against other active filters) ── */
   const ratingCounts = useMemo(() => {
     const counts: Record<RatingOpt, number> = { PENDING: 0, GOOD: 0, BAD: 0 };
-    for (const l of links) {
+    for (const l of searchedLinks) {
       // apply all filters EXCEPT ratings
       if (categories.size > 0 && (!l.category || !categories.has(l.category))) continue;
       if (urgencies.size > 0 && (!l.urgency || !urgencies.has(l.urgency))) continue;
@@ -154,11 +161,11 @@ export function Dashboard({
       }
     }
     return counts;
-  }, [links, categories, urgencies, tandoorOnly]);
+  }, [searchedLinks, categories, urgencies, tandoorOnly]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<Category, number> = { DINNER: 0, SNACK: 0, CAKE: 0, BREAKFAST: 0 };
-    for (const l of links) {
+    for (const l of searchedLinks) {
       if (!l.category) continue;
       // apply all filters EXCEPT categories
       if (ratings.size > 0 && !ratings.has(l.rating as RatingOpt)) continue;
@@ -167,11 +174,11 @@ export function Dashboard({
       counts[l.category]++;
     }
     return counts;
-  }, [links, ratings, urgencies, tandoorOnly]);
+  }, [searchedLinks, ratings, urgencies, tandoorOnly]);
 
   const urgencyCounts = useMemo(() => {
     const counts: Record<Urgency, number> = { TOMORROW: 0, NEXT_WEEK: 0, NEXT_MONTH: 0, ARCHIVE: 0 };
-    for (const l of links) {
+    for (const l of searchedLinks) {
       if (!l.urgency) continue;
       // apply all filters EXCEPT urgencies
       if (ratings.size > 0 && !ratings.has(l.rating as RatingOpt)) continue;
@@ -180,25 +187,37 @@ export function Dashboard({
       counts[l.urgency]++;
     }
     return counts;
-  }, [links, ratings, categories, tandoorOnly]);
+  }, [searchedLinks, ratings, categories, tandoorOnly]);
 
   const tandoorCount = useMemo(() => {
     let count = 0;
-    for (const l of links) {
+    for (const l of searchedLinks) {
       if (ratings.size > 0 && !ratings.has(l.rating as RatingOpt)) continue;
       if (categories.size > 0 && (!l.category || !categories.has(l.category))) continue;
       if (urgencies.size > 0 && (!l.urgency || !urgencies.has(l.urgency))) continue;
       if (l.tandoorRecipeId != null) count++;
     }
     return count;
-  }, [links, ratings, categories, urgencies]);
+  }, [searchedLinks, ratings, categories, urgencies]);
 
-  const hasActiveFilters = activeCount(ratings, categories, urgencies, tandoorOnly) > 0;
+  const hasActiveFilters =
+    activeCount(ratings, categories, urgencies, tandoorOnly) > 0 ||
+    searchQuery.trim() !== "";
 
   return (
     <div className="space-y-5">
       {/* ── Filter bar ── */}
       <div className="glass-card rounded-xl overflow-hidden">
+        {/* Search */}
+        <div className="px-4 pt-3 pb-2">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notes, URL…"
+            className="w-full bg-background/50 border border-border/60 rounded-lg px-3 py-2 text-sm outline-none focus:border-border placeholder:text-muted-foreground/40"
+          />
+        </div>
         {/* Toggle header */}
         <button
           onClick={() => setFiltersOpen((v) => !v)}
@@ -301,6 +320,7 @@ export function Dashboard({
                     setCategories(new Set());
                     setUrgencies(new Set());
                     setTandoorOnly(false);
+                    setSearchQuery("");
                   }}
                   className="text-[11px] font-medium text-muted-foreground/60 hover:text-red-400 transition-colors self-end pb-0.5"
                 >
