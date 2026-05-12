@@ -9,30 +9,20 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter } as any);
 
-function isInstagramUrl(url: string): boolean {
-  return /instagram\.com\/(p|reel|reels|tv)\//.test(url);
-}
+const SOCIAL_MEDIA_DOMAINS = new Set([
+  "instagram.com",
+  "www.instagram.com",
+  "tiktok.com",
+  "www.tiktok.com",
+  "vm.tiktok.com",
+]);
 
-function extractMeta(html: string, property: string): string | null {
-  const regex = new RegExp(
-    `<meta\\s+(?:[^>]*?)(?:property|name)=["']${property}["'][^>]*?content=["']([^"']*?)["']|<meta\\s+(?:[^>]*?)content=["']([^"']*?)["'][^>]*?(?:property|name)=["']${property}["']`,
-    "i",
-  );
-  const match = html.match(regex);
-  return match ? match[1] || match[2] || null : null;
-}
-
-async function getOgDescription(url: string): Promise<string | null> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; RecipeRater/1.0)" },
-    signal: AbortSignal.timeout(10_000),
-  });
-  const html = await res.text();
-  return (
-    extractMeta(html, "og:description") ||
-    extractMeta(html, "twitter:description") ||
-    null
-  );
+function isSocialMediaUrl(url: string): boolean {
+  try {
+    return SOCIAL_MEDIA_DOMAINS.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
 }
 
 async function main() {
@@ -54,7 +44,7 @@ async function main() {
     try {
       let description: string | null = null;
 
-      if (isInstagramUrl(link.url)) {
+      if (isSocialMediaUrl(link.url)) {
         if (!process.env.BROWSERLESS_API_KEY) {
           console.log("SKIP (no BROWSERLESS_API_KEY)");
           skipped++;
@@ -64,16 +54,14 @@ async function main() {
         description = scraped.description ? cleanInstagramDescription(scraped.description) : null;
       } else if (link.mediaAsset?.description) {
         description = link.mediaAsset.description;
-      } else {
-        description = await getOgDescription(link.url);
       }
 
       if (description) {
         await prisma.link.update({
           where: { id: link.id },
-          data: { notes: description.slice(0, 500) },
+          data: { notes: description },
         });
-        console.log(`OK — "${description.slice(0, 60)}"`);
+        console.log(`OK — "${description.slice(0, 80)}"`);
         updated++;
       } else {
         console.log("SKIP (no description found)");
