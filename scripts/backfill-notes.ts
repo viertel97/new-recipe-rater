@@ -3,6 +3,7 @@ import { PrismaClient } from "../src/generated/prisma/client.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { scrapeSocialMediaPost } from "../src/lib/scrape-social.js";
+import { cleanInstagramDescription } from "../src/lib/utils.js";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -60,7 +61,7 @@ async function main() {
           continue;
         }
         const scraped = await scrapeSocialMediaPost(link.url);
-        description = scraped.description;
+        description = scraped.description ? cleanInstagramDescription(scraped.description) : null;
       } else if (link.mediaAsset?.description) {
         description = link.mediaAsset.description;
       } else {

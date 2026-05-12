@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { Rating, Urgency, Category } from "@/generated/prisma/client";
 import { scheduleMediaResolution } from "@/lib/media-resolver";
 import { evictMediaForLink } from "@/lib/media-store";
+import { cleanInstagramDescription } from "@/lib/utils";
 
 const SOCIAL_MEDIA_DOMAINS = new Set([
   "instagram.com",
@@ -96,18 +97,7 @@ async function importSocialMediaToTandoor(
   }
 
   // Clean up OG description: strip the "X likes, Y comments - user on date: " prefix
-  let recipeText = scraped.description;
-  const quoteStart = recipeText.indexOf(':\u00A0"');
-  if (quoteStart === -1) {
-    const altStart = recipeText.indexOf(': "');
-    if (altStart !== -1 && altStart < 200) {
-      recipeText = recipeText.substring(altStart + 3);
-    }
-  } else {
-    recipeText = recipeText.substring(quoteStart + 3);
-  }
-  // Remove trailing quote and period if present
-  recipeText = recipeText.replace(/"\.\s*$/, "").trim();
+  let recipeText = cleanInstagramDescription(scraped.description);
 
   // Send to Tandoor AI import
   try {

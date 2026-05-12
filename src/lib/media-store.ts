@@ -3,6 +3,7 @@ import path from "path";
 import sharp from "sharp";
 import { prisma } from "@/lib/db";
 import { extractMeta, extractTitleTag } from "@/lib/og";
+import { cleanInstagramDescription } from "@/lib/utils";
 import type { MediaAsset } from "@/generated/prisma/client";
 
 const FETCH_TIMEOUT_MS = 30_000;
@@ -212,11 +213,12 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
         const { scrapeSocialMediaPost } = await import("@/lib/scrape-social");
         const scraped = await scrapeSocialMediaPost(url);
         if (scraped.description) {
+          const cleaned = cleanInstagramDescription(scraped.description);
           await prisma.link.updateMany({
             where: { id: linkId, notes: null },
-            data: { notes: scraped.description.slice(0, 500) },
+            data: { notes: cleaned.slice(0, 500) },
           });
-          console.log(`[media-store] notes scraped for ${url}: "${scraped.description.slice(0, 80)}"`);
+          console.log(`[media-store] notes scraped for ${url}: "${cleaned.slice(0, 80)}"`);
         } else {
           console.log(`[media-store] no description scraped for ${url}`);
         }
