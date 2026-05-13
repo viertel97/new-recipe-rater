@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const submitLinkSchema = z.object({
   url: z.string().url("Must be a valid URL"),
+  notes: z.string().optional(),
 });
 
 export const rateLinkSchema = z.object({
