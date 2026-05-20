@@ -271,7 +271,7 @@ function CategoryBadge({ category, linkId }: { category: Category | null; linkId
   // Edit mode: show mini picker
   if (editing) {
     return (
-      <div ref={containerRef} className="flex items-center gap-1">
+      <div ref={containerRef} className="flex items-center gap-1.5 flex-wrap">
         {allCategories.map((c) => {
           const meta = categoryConfig[c];
           const selected = optimisticCategory === c;
@@ -279,22 +279,23 @@ function CategoryBadge({ category, linkId }: { category: Category | null; linkId
             <button
               key={c}
               onClick={() => pick(c)}
-              className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider border transition-all"
+              className="inline-flex items-center text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-0.5 rounded-full border transition-all duration-150 hover:scale-[1.03]"
               title={meta.label}
               style={
                 selected
                   ? {
-                      borderColor: `color-mix(in oklch, ${meta.color} 50%, transparent)`,
-                      background: `color-mix(in oklch, ${meta.color} 18%, transparent)`,
+                      borderColor: `color-mix(in oklch, ${meta.color} 55%, transparent)`,
+                      background: `color-mix(in oklch, ${meta.color} 22%, transparent)`,
                       color: meta.color,
                     }
                   : {
-                      borderColor: "transparent",
-                      color: "oklch(0.5 0 0 / 0.4)",
+                      borderColor: `color-mix(in oklch, ${meta.color} 35%, transparent)`,
+                      background: `color-mix(in oklch, ${meta.color} 8%, transparent)`,
+                      color: `color-mix(in oklch, ${meta.color} 85%, transparent)`,
                     }
               }
             >
-              {c === "BREAKFAST" ? "Brk" : c === "DINNER" ? "Din" : meta.label.slice(0, 3)}
+              {meta.label}
             </button>
           );
         })}
@@ -317,14 +318,15 @@ function CategoryBadge({ category, linkId }: { category: Category | null; linkId
     );
   }
 
-  // No category yet: show a subtle "+" to set one
+  // No category yet: show a clearly visible "Categorize" pill
   return (
     <button
       onClick={() => setEditing(true)}
-      className="inline-flex items-center text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-0.5 rounded-full cursor-pointer text-muted-foreground/50 hover:text-muted-foreground border border-dashed border-border/40 hover:border-border/70 transition-all"
+      className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-0.5 rounded-full cursor-pointer text-muted-foreground hover:text-foreground border border-dashed border-border/70 hover:border-border bg-background/40 hover:bg-background/70 transition-all"
       title="Set category"
     >
-      +
+      <span className="text-[12px] leading-none -mt-px">+</span>
+      <span>Categorize</span>
     </button>
   );
 }

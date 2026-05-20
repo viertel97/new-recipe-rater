@@ -33,6 +33,7 @@ from import_to_db import (
     load_entries,
     load_env,
     parse_since,
+    poll_categorize,
     trigger_backfill,
     trigger_categorize,
 )
@@ -89,6 +90,9 @@ def main() -> int:
     p.add_argument("--limit", type=int, default=0, help="Max posts to pull (0 = all)")
     p.add_argument("--dry-run", action="store_true", help="Preview import; no DB writes")
     p.add_argument("--skip-pull", action="store_true", help="Skip pull; import existing JSON in output/")
+    p.add_argument("--no-poll", action="store_true", help="Skip polling categorize-pending until queue drains.")
+    p.add_argument("--poll-interval", type=int, default=30, help="Seconds between categorize polls (default: 30).")
+    p.add_argument("--poll-max", type=int, default=20, help="Max categorize polls (default: 20).")
     args = p.parse_args()
 
     if args.skip_pull:
@@ -100,9 +104,13 @@ def main() -> int:
         paths = [pull(args.collection, args.limit)]
 
     inserted = do_import(paths, args.since, args.dry_run)
-    if not args.dry_run and inserted > 0:
-        trigger_backfill()
-        trigger_categorize()
+    if not args.dry_run:
+        if inserted > 0:
+            trigger_backfill()
+        if args.no_poll:
+            trigger_categorize()
+        else:
+            poll_categorize(args.poll_interval, args.poll_max)
     return 0
 
 

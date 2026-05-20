@@ -25,9 +25,26 @@ type Signals = {
   title: string | null;
   description: string | null;
   siteName: string | null;
+  notes: string | null;
 };
 
-async function fetchSignals(url: string): Promise<Signals> {
+const SOCIAL_HOSTS = ["instagram.com", "tiktok.com"];
+
+function isSocialUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return SOCIAL_HOSTS.some((h) => host.includes(h));
+  } catch {
+    return false;
+  }
+}
+
+async function fetchSignals(url: string, notes: string | null): Promise<Signals> {
+  // Social media URLs serve login walls to bots — skip fetch, rely on notes
+  if (isSocialUrl(url) && notes) {
+    return { url, title: null, description: null, siteName: null, notes };
+  }
+
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; RecipeRater/1.0)" },
@@ -44,9 +61,10 @@ async function fetchSignals(url: string): Promise<Signals> {
         extractMeta(html, "og:description") ||
         extractMeta(html, "twitter:description"),
       siteName: extractMeta(html, "og:site_name"),
+      notes,
     };
   } catch {
-    return { url, title: null, description: null, siteName: null };
+    return { url, title: null, description: null, siteName: null, notes };
   }
 }
 
@@ -56,6 +74,7 @@ function buildUserMessage(s: Signals): string {
     s.siteName ? `Site: ${s.siteName}` : null,
     s.title ? `Title: ${s.title}` : null,
     s.description ? `Description: ${s.description}` : null,
+    s.notes ? `Caption: ${s.notes}` : null,
   ].filter(Boolean);
   return parts.join("\n");
 }
@@ -150,7 +169,7 @@ export async function categorizeLink(linkId: string): Promise<void> {
   }
 
   try {
-    const signals = await fetchSignals(link.url);
+    const signals = await fetchSignals(link.url, link.notes);
     const { category } = await classify(signals);
     await prisma.link.update({
       where: { id: linkId },

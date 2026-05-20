@@ -325,6 +325,5 @@ export async function setCategory(
     },
   });
 
-  revalidatePath("/");
   return { success: true };
 }

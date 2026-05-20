@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -28,12 +29,12 @@ ENV_FILE = REPO_ROOT / ".env"
 SUBMITTER_USERNAME = "janik"
 
 
-def _post_admin(endpoint: str, label: str) -> None:
+def _post_admin(endpoint: str, label: str) -> int | None:
     url = os.environ.get("APP_URL", "http://localhost:3000")
     secret = os.environ.get("API_SECRET")
     if not secret:
         print(f"API_SECRET not set, skipping {label}.")
-        return
+        return None
     try:
         req = urllib.request.Request(
             f"{url}/api/admin/{endpoint}",
@@ -42,17 +43,36 @@ def _post_admin(endpoint: str, label: str) -> None:
         )
         with urllib.request.urlopen(req, timeout=30) as res:
             data = json.loads(res.read())
-            print(f"Triggered {label} for {data.get('queued', 0)} pending links.")
+            queued = int(data.get("queued", 0))
+            print(f"Triggered {label} for {queued} pending links.")
+            return queued
     except Exception as e:
         print(f"Warning: failed to trigger {label}: {e}")
+        return None
 
 
 def trigger_backfill() -> None:
     _post_admin("backfill-media", "media backfill")
 
 
-def trigger_categorize() -> None:
-    _post_admin("categorize-pending", "categorization")
+def trigger_categorize() -> int | None:
+    return _post_admin("categorize-pending", "categorization")
+
+
+def poll_categorize(interval: int, max_attempts: int) -> None:
+    """Repeatedly trigger categorize-pending until queued hits 0 or attempts exhausted."""
+    for attempt in range(1, max_attempts + 1):
+        queued = trigger_categorize()
+        if queued == 0:
+            print(f"All links categorized after {attempt} poll(s).")
+            return
+        if queued is None:
+            return  # auth missing or error already logged
+        if attempt == max_attempts:
+            print(f"Poll exhausted ({max_attempts} attempts); {queued} still pending.")
+            return
+        print(f"Sleeping {interval}s before next poll ({attempt}/{max_attempts})...")
+        time.sleep(interval)
 
 
 def load_env() -> None:
@@ -176,6 +196,23 @@ def main() -> int:
         default="2026",
         help="Only import posts taken on/after this date (YYYY or YYYY-MM-DD). Default: 2026. Pass 'all' to disable.",
     )
+    p.add_argument(
+        "--no-poll",
+        action="store_true",
+        help="Skip polling categorize-pending until queue drains (poll is default).",
+    )
+    p.add_argument(
+        "--poll-interval",
+        type=int,
+        default=30,
+        help="Seconds between categorize-pending polls (default: 30).",
+    )
+    p.add_argument(
+        "--poll-max",
+        type=int,
+        default=20,
+        help="Max categorize-pending polls before giving up (default: 20).",
+    )
     args = p.parse_args()
 
     since = None if args.since.lower() == "all" else parse_since(args.since)
@@ -208,8 +245,11 @@ def main() -> int:
     tag = "WOULD INSERT" if args.dry_run else "inserted"
     print(f"{tag}: {inserted}  skipped (dup): {skipped}")
 
-    if not args.dry_run and inserted > 0:
-        trigger_categorize()
+    if not args.dry_run:
+        if args.no_poll:
+            trigger_categorize()
+        else:
+            poll_categorize(args.poll_interval, args.poll_max)
 
     return 0
 
