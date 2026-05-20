@@ -105,8 +105,7 @@ def main() -> int:
 
     inserted = do_import(paths, args.since, args.dry_run)
     if not args.dry_run:
-        if inserted > 0:
-            trigger_backfill()
+        trigger_backfill()
         if args.no_poll:
             trigger_categorize()
         else:
