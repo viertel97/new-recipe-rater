@@ -437,7 +437,10 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
           <div
             className="relative aspect-square max-h-[220px] sm:max-h-[360px] overflow-hidden bg-background/30 cursor-pointer group"
             onClick={() => {
-              if (window.innerWidth < 768) {
+              const isDesktop =
+                typeof window !== "undefined" &&
+                window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+              if (!isDesktop) {
                 window.open(link.url, "_blank");
               } else {
                 setModalOpen(true);
