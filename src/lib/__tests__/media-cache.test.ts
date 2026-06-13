@@ -16,6 +16,8 @@ function makeLink(id: string, url: string): LinkItem {
     createdAt: new Date("2026-01-01"),
     submittedById: "u1",
     submittedBy: { name: null, email: null },
+    mediaAsset: null,
+    mediaStatus: "RESOLVED",
   };
 }
 
