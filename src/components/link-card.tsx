@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { rateLink, resetRating, importToTandoor, setCategory } from "@/lib/actions";
 import { type Urgency, type LinkItem, type OgData, type Category, type MediaAsset } from "@/types/link";
 import { getInstagramPostId, isInstagramUrl, instagramThumbnailUrl } from "@/lib/instagram";
+import { MediaCache } from "@/lib/media-cache";
 
 function MediaPreview({ asset, url }: { asset: MediaAsset; url: string }) {
   const imgSrc = asset.type === "VIDEO" ? (asset.thumbnailUrl ?? asset.blobUrl) : asset.blobUrl;
@@ -46,11 +47,18 @@ function OgPreview({ url }: { url: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/og?url=${encodeURIComponent(url)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data) => setOg(data))
-      .catch(() => setOg(null))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    MediaCache.get({ id: `og:${url}`, url } as unknown as LinkItem)
+      .then((m) => {
+        if (cancelled) return;
+        setOg(m && m.type === "image" ? m.ogData : null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   if (loading) {

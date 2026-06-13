@@ -6,6 +6,7 @@ export type CachedMedia =
   | null;
 
 const MAX_CONCURRENT = 2;
+const MAX_CACHE = 200;
 
 const cache = new Map<string, Promise<CachedMedia>>();
 const queue: Array<() => void> = [];
@@ -33,6 +34,17 @@ function release(): void {
   active--;
   const next = queue.shift();
   if (next) next();
+}
+
+function touch(id: string, value: Promise<CachedMedia>): Promise<CachedMedia> {
+  cache.delete(id);
+  cache.set(id, value);
+  while (cache.size > MAX_CACHE) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+  return value;
 }
 
 async function resolveMedia(link: LinkItem): Promise<CachedMedia> {
@@ -66,14 +78,12 @@ async function resolveMedia(link: LinkItem): Promise<CachedMedia> {
 export const MediaCache = {
   get(link: LinkItem): Promise<CachedMedia> {
     const existing = cache.get(link.id);
-    if (existing) return existing;
-    const promise = resolveMedia(link);
-    cache.set(link.id, promise);
-    return promise;
+    if (existing) return touch(link.id, existing);
+    return touch(link.id, resolveMedia(link));
   },
   warm(link: LinkItem): void {
     if (!cache.has(link.id)) {
-      cache.set(link.id, resolveMedia(link));
+      touch(link.id, resolveMedia(link));
     }
   },
   /** Test-only: clears cache. Do not call in production code. */

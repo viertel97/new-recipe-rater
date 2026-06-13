@@ -88,4 +88,27 @@ describe("MediaCache", () => {
 
     expect(maxInFlight).toBeLessThanOrEqual(2);
   });
+
+  it("evicts the oldest entry when exceeding the cache cap (200)", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ title: "x", image: null, description: null, siteName: null }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    // Fill the cache to its cap, then one more to trigger eviction.
+    for (let i = 0; i < 201; i++) {
+      await MediaCache.get(makeLink(`E${i}`, `https://example.com/${i}`));
+    }
+
+    // The first-inserted entry should have been evicted: re-getting it refetches.
+    const callsBefore = fetchSpy.mock.calls.length;
+    await MediaCache.get(makeLink("E0", "https://example.com/0"));
+    expect(fetchSpy.mock.calls.length).toBe(callsBefore + 1);
+
+    // A recently-used entry should still be cached: no refetch.
+    const callsBefore2 = fetchSpy.mock.calls.length;
+    await MediaCache.get(makeLink("E200", "https://example.com/200"));
+    expect(fetchSpy.mock.calls.length).toBe(callsBefore2);
+  });
 });
