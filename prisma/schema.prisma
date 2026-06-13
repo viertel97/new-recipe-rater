@@ -15,7 +15,8 @@ model User {
   name      String?
   createdAt DateTime @default(now())
 
-  links Link[]
+  links             Link[]
+  sharedCollections SharedCollection[]
 }
 
 model Link {
@@ -42,6 +43,17 @@ model Link {
 
   @@index([categoryStatus])
   @@index([mediaStatus])
+}
+
+model SharedCollection {
+  id          String   @id @default(cuid())
+  linkIds     String[]
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([expiresAt])
 }
 
 model MediaAsset {
