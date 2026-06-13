@@ -19,6 +19,8 @@ function MediaPreview({ asset, url }: { asset: MediaAsset; url: string }) {
       <img
         src={imgSrc}
         alt={asset.title || ""}
+        loading="lazy"
+        decoding="async"
         className="w-full object-cover max-h-[220px] sm:max-h-[300px] group-hover:scale-[1.02] transition-transform duration-300"
       />
       {asset.type === "VIDEO" && (
@@ -73,6 +75,8 @@ function OgPreview({ url }: { url: string }) {
         <img
           src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="w-8 h-8 rounded"
         />
         <div className="min-w-0">
@@ -96,6 +100,8 @@ function OgPreview({ url }: { url: string }) {
       <img
         src={og.image}
         alt={og.title || ""}
+        loading="lazy"
+        decoding="async"
         className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
       />
       {(og.title || og.siteName) && (

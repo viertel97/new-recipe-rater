@@ -352,7 +352,11 @@ export function Dashboard({
             <div
               key={link.id}
               className="animate-card-enter"
-              style={{ animationDelay: `${i * 60}ms` }}
+              style={{
+                animationDelay: `${Math.min(i, 12) * 60}ms`,
+                contentVisibility: "auto",
+                containIntrinsicSize: "auto 420px",
+              }}
             >
               <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
             </div>
