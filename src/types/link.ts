@@ -42,3 +42,10 @@ export type OgData = {
   description: string | null;
   siteName: string | null;
 };
+
+export type SharedCollectionView = {
+  token: string;
+  linkIds: string[];
+  expiresAt: Date;
+  hoursLeft: number;
+};
