@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { LinkCard } from "@/components/link-card";
-import { type LinkItem, type Category, type Urgency } from "@/types/link";
+import { type LinkItem, type Category, type Urgency, type SharedCollectionView } from "@/types/link";
 import { searchLinks } from "@/lib/search-links";
+import { createSharedCollection } from "@/lib/actions";
 
 /* ── Filter configs ─────────────────────────────────────────────── */
 
@@ -111,11 +113,60 @@ export function Dashboard({
   links,
   currentUserId,
   tandoorUrl,
+  collection = null,
+  expiredToken = false,
 }: {
   links: LinkItem[];
   currentUserId: string;
   tandoorUrl?: string;
+  collection?: SharedCollectionView | null;
+  expiredToken?: boolean;
 }) {
+  const collectionMode = collection !== null;
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function toggleSelected(id: string) {
+    setSelectedIds((s) => toggle(s, id));
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setShareUrl(null);
+    setCreateError(null);
+    setCopied(false);
+  }
+
+  async function handleCreateLink() {
+    if (selectedIds.size === 0 || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    const result = await createSharedCollection(Array.from(selectedIds));
+    setCreating(false);
+    if ("token" in result) {
+      setShareUrl(`${window.location.origin}/?c=${result.token}`);
+    } else {
+      setCreateError(result.error);
+    }
+  }
+
+  async function handleCopy() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   const [ratings, setRatings] = useState<Set<RatingOpt>>(new Set());
   const [categories, setCategories] = useState<Set<Category>>(new Set());
   const [urgencies, setUrgencies] = useState<Set<Urgency>>(new Set());
@@ -206,7 +257,36 @@ export function Dashboard({
 
   return (
     <div className="space-y-5">
+      {expiredToken && (
+        <div className="glass-card rounded-xl p-4 border border-red-500/30">
+          <p className="text-sm text-red-400">
+            This shared link has expired. Showing all recipes instead.
+          </p>
+        </div>
+      )}
+
+      {collectionMode && collection && (
+        <div className="glass-card rounded-xl p-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Shared collection · {collection.linkIds.length} recipe
+              {collection.linkIds.length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+              Expires in {collection.hoursLeft}h
+            </p>
+          </div>
+          <Link
+            href="/"
+            className="text-xs font-medium text-coral hover:opacity-80 transition-opacity whitespace-nowrap"
+          >
+            View all recipes
+          </Link>
+        </div>
+      )}
+
       {/* ── Filter bar ── */}
+      {!collectionMode && (
       <div className="glass-card rounded-xl overflow-hidden">
         {/* Search */}
         <div className="px-4 pt-3 pb-2">
@@ -331,6 +411,28 @@ export function Dashboard({
           </div>
         )}
       </div>
+      )}
+
+      {/* ── Select toggle ── */}
+      {!collectionMode && (
+        <div className="flex items-center justify-end">
+          {selectMode ? (
+            <button
+              onClick={exitSelectMode}
+              className="text-xs font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
+            >
+              Cancel selection
+            </button>
+          ) : (
+            <button
+              onClick={() => setSelectMode(true)}
+              className="text-xs font-medium text-coral hover:opacity-80 transition-opacity"
+            >
+              Select recipes
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Cards grid ── */}
       {filtered.length === 0 ? (
@@ -348,15 +450,100 @@ export function Dashboard({
         </div>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((link, i) => (
+          {filtered.map((link, i) => {
+            const selected = selectedIds.has(link.id);
+            return (
             <div
               key={link.id}
               className="animate-card-enter"
-              style={{ animationDelay: `${i * 60}ms` }}
+              style={{
+                animationDelay: `${Math.min(i, 12) * 60}ms`,
+                contentVisibility: "auto",
+                containIntrinsicSize: "auto 420px",
+              }}
             >
-              <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
+              {selectMode ? (
+                <div
+                  onClick={() => toggleSelected(link.id)}
+                  className={`relative cursor-pointer rounded-xl transition-shadow ${
+                    selected ? "ring-2 ring-coral" : "ring-1 ring-transparent"
+                  }`}
+                >
+                  <div className="absolute top-3 left-3 z-10">
+                    <div
+                      className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+                        selected
+                          ? "bg-coral border-coral text-coral-foreground"
+                          : "bg-black/40 border-white/70"
+                      }`}
+                    >
+                      {selected && (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          className="w-3.5 h-3.5"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                  <div className="pointer-events-none">
+                    <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
+                  </div>
+                </div>
+              ) : (
+                <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
+              )}
             </div>
-          ))}
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Floating select action bar ── */}
+      {selectMode && !collectionMode && (selectedIds.size > 0 || shareUrl || createError) && (
+        <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4 pointer-events-none">
+          <div className="glass-card rounded-2xl px-4 py-3 flex flex-col gap-2 shadow-xl pointer-events-auto w-full max-w-md">
+            {createError && (
+              <p className="text-[11px] text-red-400">{createError}</p>
+            )}
+            {shareUrl ? (
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="flex-1 min-w-0 bg-background/50 border border-border/60 rounded-lg px-3 py-2 text-xs outline-none"
+                />
+                <button
+                  onClick={handleCopy}
+                  className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold bg-coral text-coral-foreground hover:opacity-90 transition-opacity"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+                <button
+                  onClick={exitSelectMode}
+                  className="shrink-0 px-2 py-2 rounded-lg text-xs font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                <button
+                  onClick={handleCreateLink}
+                  disabled={creating || selectedIds.size === 0}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-coral text-coral-foreground hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {creating ? "Creating…" : "Create 24h link"}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

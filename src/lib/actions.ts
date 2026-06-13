@@ -8,6 +8,8 @@ import { Rating, Urgency, Category } from "@/generated/prisma/client";
 import { scheduleMediaResolution } from "@/lib/media-resolver";
 import { evictMediaForLink } from "@/lib/media-store";
 import { cleanInstagramDescription } from "@/lib/utils";
+import { createCollectionSchema, COLLECTION_TTL_MS, isExpired, hoursUntil } from "@/lib/collections";
+import type { SharedCollectionView } from "@/types/link";
 
 const SOCIAL_MEDIA_DOMAINS = new Set([
   "instagram.com",
@@ -326,4 +328,61 @@ export async function setCategory(
   });
 
   return { success: true };
+}
+
+export async function createSharedCollection(
+  linkIds: string[]
+): Promise<{ token: string } | { error: string }> {
+  const session = await auth();
+  if (!session?.user) return { error: "Not authenticated" };
+
+  const parsed = createCollectionSchema.safeParse({ linkIds });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+
+  // Keep only ids that actually exist.
+  const existing = await prisma.link.findMany({
+    where: { id: { in: parsed.data.linkIds } },
+    select: { id: true },
+  });
+  const validIds = existing.map((l) => l.id);
+  if (validIds.length === 0) {
+    return { error: "No valid recipes selected" };
+  }
+
+  const collection = await prisma.sharedCollection.create({
+    data: {
+      linkIds: validIds,
+      createdById: session.user.id,
+      expiresAt: new Date(Date.now() + COLLECTION_TTL_MS),
+    },
+  });
+
+  return { token: collection.id };
+}
+
+export async function getSharedCollection(
+  token: string
+): Promise<SharedCollectionView | null> {
+  if (!token) return null;
+
+  const collection = await prisma.sharedCollection.findUnique({
+    where: { id: token },
+  });
+
+  if (!collection || isExpired(collection.expiresAt)) {
+    // Best-effort opportunistic cleanup of expired rows; never block the read.
+    prisma.sharedCollection
+      .deleteMany({ where: { expiresAt: { lte: new Date() } } })
+      .catch((err) => console.error("[getSharedCollection] cleanup failed:", err));
+    return null;
+  }
+
+  return {
+    token: collection.id,
+    linkIds: collection.linkIds,
+    expiresAt: collection.expiresAt,
+    hoursLeft: hoursUntil(collection.expiresAt),
+  };
 }
