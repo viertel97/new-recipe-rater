@@ -4,15 +4,7 @@ import { useState, useOptimistic, useEffect, useCallback, useRef, startTransitio
 import { createPortal } from "react-dom";
 import { rateLink, resetRating, importToTandoor, setCategory } from "@/lib/actions";
 import { type Urgency, type LinkItem, type OgData, type Category, type MediaAsset } from "@/types/link";
-
-function getPostId(url: string): string | null {
-  const match = url.match(/instagram\.com\/(?:p|reel|reels|tv)\/([\w-]+)/);
-  return match ? match[1] : null;
-}
-
-function isInstagramUrl(url: string): boolean {
-  return /instagram\.com\/(p|reel|reels|tv)\//.test(url);
-}
+import { getInstagramPostId, isInstagramUrl, instagramThumbnailUrl } from "@/lib/instagram";
 
 function MediaPreview({ asset, url }: { asset: MediaAsset; url: string }) {
   const imgSrc = asset.type === "VIDEO" ? (asset.thumbnailUrl ?? asset.blobUrl) : asset.blobUrl;
@@ -386,7 +378,7 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const isInsta = isInstagramUrl(link.url);
-  const postId = isInsta ? getPostId(link.url) : null;
+  const postId = isInsta ? getInstagramPostId(link.url) : null;
   const closeModal = useCallback(() => setModalOpen(false), []);
 
   async function handleRate(rating: "GOOD" | "BAD") {
@@ -447,11 +439,17 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
               }
             }}
           >
-            <iframe
-              src={`https://www.instagram.com/p/${postId}/embed/`}
-              className="w-full h-full border-0 pointer-events-none"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={instagramThumbnailUrl(postId)}
+              alt=""
               loading="lazy"
-              tabIndex={-1}
+              decoding="async"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+              }}
             />
             <div className="absolute inset-0 flex items-center justify-center bg-transparent group-hover:bg-black/20 transition-colors">
               <div className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity">
