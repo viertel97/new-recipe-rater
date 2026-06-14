@@ -5,6 +5,8 @@ COPY prisma ./prisma
 RUN npm ci
 COPY . .
 RUN npm run build
+# Strip dev dependencies so only runtime deps land in the final image.
+RUN npm prune --omit=dev
 
 FROM node:20-alpine
 WORKDIR /app
