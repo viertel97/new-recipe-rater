@@ -37,3 +37,29 @@ services:
       DATA_DIR: /data
     volumes:
       - ./data/ig-sync:/data
+
+  scheduler:
+    image: curlimages/curl:latest
+    restart: unless-stopped
+    environment:
+      # Target the local app container, not the public APP_URL from .env — backfilled
+      # media must land in this compose's /data/media volume, not Vercel Blob storage.
+      TARGET_URL: ${BACKFILL_TARGET_URL:-http://app:3000}
+      API_SECRET: ${API_SECRET}
+      # Sleep a random BASE ± JITTER seconds between sweeps to avoid a fixed cadence.
+      BASE_INTERVAL: ${BACKFILL_INTERVAL:-3600}
+      JITTER: ${BACKFILL_JITTER:-600}
+    depends_on:
+      app:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -fsS -X POST "$$TARGET_URL/api/admin/backfill-media"     -H "Authorization: Bearer $$API_SECRET" || true
+          curl -fsS -X POST "$$TARGET_URL/api/admin/categorize-pending" -H "Authorization: Bearer $$API_SECRET" || true
+          RAND=$$(od -An -N4 -tu4 < /dev/urandom | tr -d ' ')
+          SLEEP=$$(( BASE_INTERVAL - JITTER + RAND % (2 * JITTER + 1) ))
+          echo "[scheduler] next sweep in $${SLEEP}s"
+          sleep "$$SLEEP"
+        done
