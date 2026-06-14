@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { LinkCard } from "@/components/link-card";
 import { type LinkItem, type Category, type Urgency, type SharedCollectionView } from "@/types/link";
 import { searchLinks } from "@/lib/search-links";
@@ -516,7 +517,8 @@ export function Dashboard({
       )}
 
       {/* ── Floating select action bar ── */}
-      {selectMode && !collectionMode && (selectedIds.size > 0 || shareUrl || createError) && (
+      {selectMode && !collectionMode && (selectedIds.size > 0 || shareUrl || createError) &&
+        createPortal(
         <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4 pointer-events-none">
           <div className="glass-card rounded-2xl px-4 py-3 flex flex-col gap-2 shadow-xl pointer-events-auto w-full max-w-md">
             {createError && (
@@ -556,7 +558,8 @@ export function Dashboard({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
