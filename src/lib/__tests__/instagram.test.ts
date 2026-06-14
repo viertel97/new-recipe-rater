@@ -19,4 +19,11 @@ describe("instagram helpers", () => {
   it("builds a lightweight thumbnail url from a post id", () => {
     expect(instagramThumbnailUrl("AbC1")).toBe("https://www.instagram.com/p/AbC1/media/?size=l");
   });
+
+  it("rejects urls where instagram.com is not the host (SSRF guard)", () => {
+    expect(getInstagramPostId("https://evil.com/instagram.com/p/ABC123/")).toBeNull();
+    expect(getInstagramPostId("http://169.254.169.254/instagram.com/p/x/")).toBeNull();
+    expect(isInstagramUrl("https://evil.com/instagram.com/p/ABC123/")).toBe(false);
+    expect(isInstagramUrl("https://instagram.com.evil.com/p/x/")).toBe(false);
+  });
 });

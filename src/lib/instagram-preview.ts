@@ -6,6 +6,7 @@ import { instagramPreviewFilename } from "@/lib/instagram-preview-name";
 
 const MEDIA_DIR = process.env.MEDIA_DIR ?? "/data/media";
 const FETCH_TIMEOUT_MS = 15_000;
+const MAX_PREVIEW_BYTES = 25 * 1024 * 1024; // hard cap on bytes buffered from upstream
 
 // Per-postId mutex so concurrent requests for the same preview share one fetch.
 const inFlight = new Map<string, Promise<string | null>>();
@@ -17,6 +18,27 @@ async function fileExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Stream the response body but stop once we exceed `max`, so a hostile or
+// misbehaving upstream cannot OOM the process via an unbounded body.
+async function readCapped(res: Response, max: number): Promise<Buffer | null> {
+  const reader = res.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.length;
+    if (total > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
 }
 
 async function pickPreviewSource(url: string, postId: string): Promise<string | null> {
@@ -58,7 +80,8 @@ async function buildPreview(url: string, postId: string, filename: string): Prom
 
   let compressed: Buffer;
   try {
-    const raw = Buffer.from(await res.arrayBuffer());
+    const raw = await readCapped(res, MAX_PREVIEW_BYTES);
+    if (!raw) return null;
     compressed = await sharp(raw)
       .resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 80, mozjpeg: true })
@@ -70,8 +93,13 @@ async function buildPreview(url: string, postId: string, filename: string): Prom
   await fs.mkdir(MEDIA_DIR, { recursive: true });
   // Atomic publish: write to a temp file then rename so readers never see a partial JPEG.
   const tmpPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmpPath, compressed);
-  await fs.rename(tmpPath, finalPath);
+  try {
+    await fs.writeFile(tmpPath, compressed);
+    await fs.rename(tmpPath, finalPath);
+  } catch {
+    await fs.unlink(tmpPath).catch(() => {});
+    return null;
+  }
   return finalPath;
 }
 
