@@ -6,6 +6,7 @@ import { LinkCard } from "@/components/link-card";
 import { type LinkItem, type Category, type Urgency, type SharedCollectionView } from "@/types/link";
 import { searchLinks } from "@/lib/search-links";
 import { createSharedCollection } from "@/lib/actions";
+import { useWindowVirtualGrid } from "@/components/use-window-virtual-grid";
 
 /* ── Filter configs ─────────────────────────────────────────────── */
 
@@ -255,6 +256,9 @@ export function Dashboard({
     activeCount(ratings, categories, urgencies, tandoorOnly) > 0 ||
     searchQuery.trim() !== "";
 
+  const { containerRef, columns, totalHeight, virtualRows } =
+    useWindowVirtualGrid(filtered.length);
+
   return (
     <div className="space-y-5">
       {expiredToken && (
@@ -449,55 +453,63 @@ export function Dashboard({
           </p>
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((link, i) => {
-            const selected = selectedIds.has(link.id);
+        <div ref={containerRef} className="relative" style={{ height: totalHeight }}>
+          {virtualRows.map((vr) => {
+            const startItem = vr.rowIndex * columns;
+            const rowLinks = filtered.slice(startItem, startItem + columns);
             return (
-            <div
-              key={link.id}
-              className="animate-card-enter"
-              style={{
-                animationDelay: `${Math.min(i, 12) * 60}ms`,
-                contentVisibility: "auto",
-                containIntrinsicSize: "auto 420px",
-              }}
-            >
-              {selectMode ? (
-                <div
-                  onClick={() => toggleSelected(link.id)}
-                  className={`relative cursor-pointer rounded-xl transition-shadow ${
-                    selected ? "ring-2 ring-coral" : "ring-1 ring-transparent"
-                  }`}
-                >
-                  <div className="absolute top-3 left-3 z-10">
-                    <div
-                      className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
-                        selected
-                          ? "bg-coral border-coral text-coral-foreground"
-                          : "bg-black/40 border-white/70"
-                      }`}
-                    >
-                      {selected && (
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          className="w-3.5 h-3.5"
+              <div
+                key={vr.rowIndex}
+                ref={vr.measureRef}
+                className="grid gap-5 absolute inset-x-0 pb-5"
+                style={{
+                  top: vr.start,
+                  gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                }}
+              >
+                {rowLinks.map((link) => {
+                  const selected = selectedIds.has(link.id);
+                  return (
+                    <div key={link.id}>
+                      {selectMode ? (
+                        <div
+                          onClick={() => toggleSelected(link.id)}
+                          className={`relative cursor-pointer rounded-xl transition-shadow ${
+                            selected ? "ring-2 ring-coral" : "ring-1 ring-transparent"
+                          }`}
                         >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
+                          <div className="absolute top-3 left-3 z-10">
+                            <div
+                              className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+                                selected
+                                  ? "bg-coral border-coral text-coral-foreground"
+                                  : "bg-black/40 border-white/70"
+                              }`}
+                            >
+                              {selected && (
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="3"
+                                  className="w-3.5 h-3.5"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                          <div className="pointer-events-none">
+                            <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
+                          </div>
+                        </div>
+                      ) : (
+                        <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
                       )}
                     </div>
-                  </div>
-                  <div className="pointer-events-none">
-                    <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
-                  </div>
-                </div>
-              ) : (
-                <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
-              )}
-            </div>
+                  );
+                })}
+              </div>
             );
           })}
         </div>
