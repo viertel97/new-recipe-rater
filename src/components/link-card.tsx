@@ -4,7 +4,7 @@ import { useState, useOptimistic, useEffect, useCallback, useRef, startTransitio
 import { createPortal } from "react-dom";
 import { rateLink, resetRating, importToTandoor, setCategory } from "@/lib/actions";
 import { type Urgency, type LinkItem, type OgData, type Category, type MediaAsset } from "@/types/link";
-import { getInstagramPostId, isInstagramUrl, instagramThumbnailUrl } from "@/lib/instagram";
+import { getInstagramPostId, isInstagramUrl } from "@/lib/instagram";
 import { MediaCache } from "@/lib/media-cache";
 
 function MediaPreview({ asset, url }: { asset: MediaAsset; url: string }) {
@@ -455,7 +455,7 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={instagramThumbnailUrl(postId)}
+              src={`/api/ig-thumb?url=${encodeURIComponent(link.url)}`}
               alt=""
               loading="lazy"
               decoding="async"
