@@ -8,6 +8,7 @@ import { Rating, Urgency, Category } from "@/generated/prisma/client";
 import { scheduleMediaResolution } from "@/lib/media-resolver";
 import { evictMediaForLink } from "@/lib/media-store";
 import { cleanInstagramDescription } from "@/lib/utils";
+import { aiImportText, createTandoorRecipe, uploadTandoorImage } from "@/lib/tandoor";
 import { createCollectionSchema, COLLECTION_TTL_MS, isExpired, hoursUntil } from "@/lib/collections";
 import type { SharedCollectionView } from "@/types/link";
 
@@ -72,19 +73,15 @@ export async function importToTandoor(linkId: string) {
   const tandoorToken = process.env.TANDOOR_TOKEN;
   if (!tandoorUrl || !tandoorToken) return { error: "Tandoor is not configured" };
 
+  // Presence checked above; helpers read TANDOOR_* from env themselves.
   if (isSocialMediaUrl(link.url)) {
-    return importSocialMediaToTandoor(linkId, link.url, tandoorUrl, tandoorToken);
+    return importSocialMediaToTandoor(linkId, link.url);
   } else {
-    return importBookmarkletToTandoor(linkId, link.url, tandoorUrl, tandoorToken);
+    return importGenericToTandoor(linkId, link.url);
   }
 }
 
-async function importSocialMediaToTandoor(
-  linkId: string,
-  url: string,
-  tandoorUrl: string,
-  tandoorToken: string
-) {
+async function importSocialMediaToTandoor(linkId: string, url: string) {
   // Scrape the post using a headless browser (like kitshn's WebView)
   const { scrapeSocialMediaPost } = await import("@/lib/scrape-social");
   const scraped = await scrapeSocialMediaPost(url);
@@ -99,152 +96,89 @@ async function importSocialMediaToTandoor(
   }
 
   // Clean up OG description: strip the "X likes, Y comments - user on date: " prefix
-  let recipeText = cleanInstagramDescription(scraped.description);
+  const recipeText = cleanInstagramDescription(scraped.description);
 
-  // Send to Tandoor AI import
   try {
-    const aiProviderId = process.env.TANDOOR_AI_PROVIDER_ID;
-
     console.log("[importSocialMedia] Sending to Tandoor:", {
       textLength: recipeText.length,
       textPreview: recipeText.substring(0, 200),
-      aiProviderId: aiProviderId || "default",
     });
 
-    const formData = new FormData();
-    formData.append("recipe_id", "");
-    formData.append("text", recipeText);
-    formData.append("file", new Blob([]), "");
-    if (aiProviderId) {
-      formData.append("ai_provider_id", aiProviderId);
-    }
-
-    const res = await fetch(`${tandoorUrl}/api/ai-import/`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${tandoorToken}`,
-      },
-      body: formData,
-    });
-
-    const aiData = await res.json();
-
+    const recipe = await aiImportText(recipeText);
     console.log("[importSocialMedia] AI parse response:", {
-      status: res.status,
-      error: aiData.error,
-      recipeName: aiData.recipe?.name,
-      stepsCount: aiData.recipe?.steps?.length,
-      msg: aiData.msg?.substring(0, 200),
+      recipeName: recipe.name,
+      stepsCount: recipe.steps?.length,
     });
 
-    if (!res.ok || aiData.error || !aiData.recipe) {
-      return { error: aiData.msg || `Tandoor AI import failed (${res.status})` };
-    }
+    const { id } = await createTandoorRecipe(recipe, url);
+    console.log("[importSocialMedia] Recipe create response:", { id, name: recipe.name });
 
-    // Step 2: Create the recipe in Tandoor (ai-import only parses, doesn't save)
-    const recipePayload = {
-      ...aiData.recipe,
-      source_url: url,
-      servings: aiData.recipe.servings ?? 1,
-    };
-
-    const createRes = await fetch(`${tandoorUrl}/api/recipe/`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${tandoorToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(recipePayload),
-    });
-
-    const createdRecipe = await createRes.json();
-
-    console.log("[importSocialMedia] Recipe create response:", {
-      status: createRes.status,
-      id: createdRecipe.id,
-      name: createdRecipe.name,
-    });
-
-    if (!createRes.ok) {
-      return { error: `Failed to create recipe (${createRes.status}): ${JSON.stringify(createdRecipe).substring(0, 200)}` };
-    }
-
-    // Save Tandoor recipe ID to database
     await prisma.link.update({
       where: { id: linkId },
-      data: { tandoorRecipeId: createdRecipe.id },
+      data: { tandoorRecipeId: id },
     });
 
-    // Step 3: Upload recipe image via PUT /api/recipe/{id}/image/ (like kitshn does)
     if (scraped.imageURL) {
-      try {
-        const imageForm = new FormData();
-        imageForm.append("image_url", scraped.imageURL);
-
-        const imgRes = await fetch(`${tandoorUrl}/api/recipe/${createdRecipe.id}/image/`, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${tandoorToken}`,
-          },
-          body: imageForm,
-        });
-
-        console.log("[importSocialMedia] Image upload response:", {
-          status: imgRes.status,
-        });
-      } catch (imgErr) {
-        console.error("[importSocialMedia] Image upload failed (non-fatal):", imgErr);
-      }
+      await uploadTandoorImage(id, scraped.imageURL);
     }
 
     revalidatePath("/");
-    return {
-      success: true,
-      tandoorRecipeId: createdRecipe.id,
-    };
+    return { success: true, tandoorRecipeId: id };
   } catch (e) {
     console.error("[importSocialMedia] Error:", e);
-    return { error: "Failed to connect to Tandoor" };
+    return { error: e instanceof Error ? e.message : "Failed to connect to Tandoor" };
   }
 }
 
-async function importBookmarkletToTandoor(
-  linkId: string,
-  url: string,
-  tandoorUrl: string,
-  tandoorToken: string
-) {
+async function importGenericToTandoor(linkId: string, url: string) {
+  const { extractRecipeFromHtml } = await import("@/lib/web-recipe");
+
   let html: string;
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; RecipeRater/1.0)" },
     });
+    console.log("[importGeneric] Fetch status:", res.status);
     html = await res.text();
   } catch {
     return { error: "Failed to fetch recipe page" };
   }
 
   try {
-    const res = await fetch(`${tandoorUrl}/api/bookmarklet-import/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${tandoorToken}`,
-      },
-      body: JSON.stringify({ url, html }),
+    const extracted = extractRecipeFromHtml(url, html);
+    console.log("[importGeneric] Extracted:", {
+      jsonLd: extracted.structured !== null,
+      textLength: extracted.text.length,
+      imageUrl: extracted.imageUrl?.substring(0, 100),
     });
 
-    if (res.status !== 201) {
-      return { error: `Tandoor import failed (${res.status})` };
+    let recipe;
+    if (extracted.structured) {
+      recipe = extracted.structured;
+    } else if (extracted.text.trim().length > 0) {
+      recipe = await aiImportText(extracted.text);
+    } else {
+      return { error: "Could not extract a recipe from this page" };
+    }
+    console.log("[importGeneric] Recipe name:", recipe.name);
+
+    const { id } = await createTandoorRecipe(recipe, url);
+    console.log("[importGeneric] Created recipe id:", id);
+
+    await prisma.link.update({
+      where: { id: linkId },
+      data: { tandoorRecipeId: id },
+    });
+
+    if (extracted.imageUrl) {
+      await uploadTandoorImage(id, extracted.imageUrl);
     }
 
-    const data = await res.json();
-    return {
-      success: true,
-      importUrl: `${tandoorUrl}/recipe/import/?bookmarklet_import=${data.id}`,
-    };
-  } catch {
-    return { error: "Failed to connect to Tandoor" };
+    revalidatePath("/");
+    return { success: true, tandoorRecipeId: id };
+  } catch (e) {
+    console.error("[importGeneric] Error:", e);
+    return { error: e instanceof Error ? e.message : "Failed to connect to Tandoor" };
   }
 }
 
