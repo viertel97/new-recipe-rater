@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: new-recipe-rater-forward
-  namespace: new-recipe-rater
+  namespace: forwarding
   labels:
     app: new-recipe-rater
 spec:
@@ -21,7 +21,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: new-recipe-rater-service
-  namespace: new-recipe-rater
+  namespace: forwarding
 spec:
   selector:
     app: new-recipe-rater
@@ -36,17 +36,17 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: new-recipe-rater-ingress
-  namespace: new-recipe-rater
+  namespace: forwarding
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt"
 spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - new-recipe-rater.viertel-it.de
+        - rr.viertel-it.de
       secretName: tls.new-recipe-rater
   rules:
-    - host: new-recipe-rater.viertel-it.de
+    - host: rr.viertel-it.de
       http:
         paths:
           - path: /
