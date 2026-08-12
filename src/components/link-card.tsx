@@ -423,12 +423,9 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
     setImportStatus(null);
     const result = await importToTandoor(link.id);
     if ("error" in result) {
-      setImportStatus(result.error);
+      setImportStatus(result.error ?? null);
     } else if ("tandoorRecipeId" in result) {
       setLocalTandoorRecipeId(result.tandoorRecipeId);
-    } else if ("importUrl" in result) {
-      window.open(result.importUrl, "_blank");
-      setImportStatus("Sent to Tandoor");
     }
     setImporting(false);
   }
