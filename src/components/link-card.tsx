@@ -2,7 +2,7 @@
 
 import { useState, useOptimistic, useEffect, useCallback, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
-import { rateLink, resetRating, importToTandoor, setCategory } from "@/lib/actions";
+import { rateLink, resetRating, importToTandoor, setCategory, deleteLink } from "@/lib/actions";
 import { type Urgency, type LinkItem, type OgData, type Category, type MediaAsset } from "@/types/link";
 import { getInstagramPostId, isInstagramUrl } from "@/lib/instagram";
 import { MediaCache } from "@/lib/media-cache";
@@ -391,6 +391,8 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
   const [reviewNote, setReviewNote] = useState(link.reviewNote ?? "");
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   const isInsta = isInstagramUrl(link.url);
   const postId = isInsta ? getInstagramPostId(link.url) : null;
   const closeModal = useCallback(() => setModalOpen(false), []);
@@ -418,6 +420,15 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
     });
   }
 
+  async function handleDelete() {
+    setLoading(true);
+    startTransition(async () => {
+      setDeleted(true);
+      await deleteLink(link.id);
+      setLoading(false);
+    });
+  }
+
   async function handleImportToTandoor() {
     setImporting(true);
     setImportStatus(null);
@@ -429,6 +440,8 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
     }
     setImporting(false);
   }
+
+  if (deleted) return null;
 
   return (
     <div className="glass-card rounded-xl overflow-hidden">
@@ -665,6 +678,37 @@ export function LinkCard({ link, canReview, tandoorUrl }: { link: LinkItem; canR
               <p className={`text-[11px] mt-1.5 text-red-400`}>
                 {importStatus}
               </p>
+            )}
+          </div>
+        )}
+
+        {/* Delete recipe */}
+        {canReview && !expanded && (
+          <div className="pt-1 flex justify-end">
+            {confirmingDelete ? (
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-muted-foreground/70">Delete this recipe?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className="text-[11px] font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="text-[11px] text-muted-foreground/40 hover:text-red-400 transition-colors"
+              >
+                Delete
+              </button>
             )}
           </div>
         )}

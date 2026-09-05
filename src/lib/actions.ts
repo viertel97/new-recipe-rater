@@ -206,6 +206,28 @@ export async function resetRating(linkId: string) {
   return { success: true };
 }
 
+export async function deleteLink(linkId: string) {
+  const session = await auth();
+  if (!session?.user) return { error: "Not authenticated" };
+
+  if (!linkId || typeof linkId !== "string") {
+    return { error: "Invalid link ID" };
+  }
+
+  const link = await prisma.link.findUnique({ where: { id: linkId } });
+  if (!link) return { error: "Link not found" };
+
+  // Clean up blob storage + mediaAsset row first; best-effort, don't block delete.
+  await evictMediaForLink(linkId).catch((err) =>
+    console.error(`[deleteLink] eviction failed for ${linkId}:`, err)
+  );
+
+  await prisma.link.delete({ where: { id: linkId } });
+
+  revalidatePath("/");
+  return { success: true };
+}
+
 export async function rateLink(
   linkId: string,
   rating: "GOOD" | "BAD",
