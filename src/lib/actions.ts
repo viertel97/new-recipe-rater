@@ -287,12 +287,13 @@ export async function setCategory(
 }
 
 export async function createSharedCollection(
-  linkIds: string[]
+  linkIds: string[],
+  permanent = false
 ): Promise<{ token: string } | { error: string }> {
   const session = await auth();
   if (!session?.user) return { error: "Not authenticated" };
 
-  const parsed = createCollectionSchema.safeParse({ linkIds });
+  const parsed = createCollectionSchema.safeParse({ linkIds, permanent });
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
   }
@@ -311,7 +312,7 @@ export async function createSharedCollection(
     data: {
       linkIds: validIds,
       createdById: session.user.id,
-      expiresAt: new Date(Date.now() + COLLECTION_TTL_MS),
+      expiresAt: parsed.data.permanent ? null : new Date(Date.now() + COLLECTION_TTL_MS),
     },
   });
 

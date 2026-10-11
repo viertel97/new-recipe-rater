@@ -51,7 +51,7 @@ model SharedCollection {
   createdBy   User     @relation(fields: [createdById], references: [id])
   createdById String
   createdAt   DateTime @default(now())
-  expiresAt   DateTime
+  expiresAt   DateTime?
 
   @@index([expiresAt])
 }

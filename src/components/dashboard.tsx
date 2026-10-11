@@ -145,11 +145,11 @@ export function Dashboard({
     setCopied(false);
   }
 
-  async function handleCreateLink() {
+  async function handleCreateLink(permanent: boolean) {
     if (selectedIds.size === 0 || creating) return;
     setCreating(true);
     setCreateError(null);
-    const result = await createSharedCollection(Array.from(selectedIds));
+    const result = await createSharedCollection(Array.from(selectedIds), permanent);
     setCreating(false);
     if ("token" in result) {
       setShareUrl(`${window.location.origin}/?c=${result.token}`);
@@ -278,7 +278,9 @@ export function Dashboard({
               {collection.linkIds.length !== 1 ? "s" : ""}
             </p>
             <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-              Expires in {collection.hoursLeft}h
+              {collection.hoursLeft === null
+                ? "Never expires"
+                : `Expires in ${collection.hoursLeft}h`}
             </p>
           </div>
           <Link
@@ -474,14 +476,18 @@ export function Dashboard({
                     <div key={link.id}>
                       {selectMode ? (
                         <div
-                          onClick={() => toggleSelected(link.id)}
-                          className={`relative cursor-pointer rounded-xl transition-shadow ${
+                          className={`relative rounded-xl transition-shadow ${
                             selected ? "ring-2 ring-coral" : "ring-1 ring-transparent"
                           }`}
                         >
                           <div className="absolute top-3 left-3 z-10">
-                            <div
-                              className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={selected}
+                              aria-label="Select recipe"
+                              onClick={() => toggleSelected(link.id)}
+                              className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors cursor-pointer ${
                                 selected
                                   ? "bg-coral border-coral text-coral-foreground"
                                   : "bg-black/40 border-white/70"
@@ -498,11 +504,9 @@ export function Dashboard({
                                   <polyline points="20 6 9 17 4 12" />
                                 </svg>
                               )}
-                            </div>
+                            </button>
                           </div>
-                          <div className="pointer-events-none">
-                            <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
-                          </div>
+                          <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
                         </div>
                       ) : (
                         <LinkCard link={link} canReview={true} tandoorUrl={tandoorUrl} />
@@ -548,13 +552,22 @@ export function Dashboard({
             ) : (
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium">{selectedIds.size} selected</span>
-                <button
-                  onClick={handleCreateLink}
-                  disabled={creating || selectedIds.size === 0}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-coral text-coral-foreground hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {creating ? "Creating…" : "Create 24h link"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCreateLink(false)}
+                    disabled={creating || selectedIds.size === 0}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold bg-coral text-coral-foreground hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {creating ? "Creating…" : "24h link"}
+                  </button>
+                  <button
+                    onClick={() => handleCreateLink(true)}
+                    disabled={creating || selectedIds.size === 0}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-coral text-coral hover:opacity-80 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Permanent link
+                  </button>
+                </div>
               </div>
             )}
           </div>

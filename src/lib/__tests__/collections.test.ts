@@ -26,6 +26,11 @@ describe("collections helpers", () => {
     expect(isExpired(new Date("2026-06-13T12:00:01Z"), now)).toBe(false);
   });
 
+  it("null expiry never expires and has no hours left", () => {
+    expect(isExpired(null)).toBe(false);
+    expect(hoursUntil(null)).toBeNull();
+  });
+
   it("hoursUntil rounds up and floors at 0", () => {
     const now = new Date("2026-06-13T12:00:00Z");
     expect(hoursUntil(new Date("2026-06-14T12:00:00Z"), now)).toBe(24);

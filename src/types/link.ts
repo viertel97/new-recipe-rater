@@ -46,6 +46,6 @@ export type OgData = {
 export type SharedCollectionView = {
   token: string;
   linkIds: string[];
-  expiresAt: Date;
-  hoursLeft: number;
+  expiresAt: Date | null;
+  hoursLeft: number | null;
 };
