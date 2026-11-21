@@ -8,8 +8,12 @@ export type ScrapeResult = {
 function connectBrowser(): Promise<Browser> {
   const token = process.env.BROWSERLESS_API_KEY;
   if (!token) throw new Error("BROWSERLESS_API_KEY is not set");
+  const launch = encodeURIComponent(
+    JSON.stringify({ args: ["--disable-blink-features=AutomationControlled"] })
+  );
   return chromium.connect(
-    `wss://production-sfo.browserless.io/chromium/playwright?token=${token}&launch={"args":["--disable-blink-features=AutomationControlled"]}`
+    `wss://production-sfo.browserless.io/chromium/playwright?token=${token}&launch=${launch}`,
+    { timeout: 30_000 }
   );
 }
 

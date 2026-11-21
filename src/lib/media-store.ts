@@ -102,13 +102,19 @@ async function doResolve(linkId: string, url: string): Promise<MediaAsset | null
         return null;
       }
       const media = result.data.media.find((m) => m.type === "video") ?? result.data.media[0];
-      if (!media?.url) {
-        await markFailed(linkId, "no usable media URL");
+      const isHttp = (u?: string | null): u is string => !!u && /^https?:\/\//i.test(u);
+      if (isHttp(media?.url)) {
+        mediaUrl = media.url;
+        thumbnailSourceUrl = media.thumbnail ?? undefined;
+        isVideo = media.type === "video";
+      } else if (isHttp(media?.thumbnail)) {
+        // snapsave sometimes returns a bare "&dl=1" href with no download token
+        console.warn(`[media-store] snapsave gave unusable url "${media?.url}" for ${url}, falling back to thumbnail`);
+        mediaUrl = media.thumbnail;
+      } else {
+        await markFailed(linkId, `no usable media URL (got "${media?.url}")`);
         return null;
       }
-      mediaUrl = media.url;
-      thumbnailSourceUrl = media.thumbnail ?? undefined;
-      isVideo = media.type === "video";
     } else {
       const res = await fetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; RecipeRater/1.0)" },

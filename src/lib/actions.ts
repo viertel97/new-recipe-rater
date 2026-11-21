@@ -84,7 +84,14 @@ export async function importToTandoor(linkId: string) {
 async function importSocialMediaToTandoor(linkId: string, url: string) {
   // Scrape the post using a headless browser (like kitshn's WebView)
   const { scrapeSocialMediaPost } = await import("@/lib/scrape-social");
-  const scraped = await scrapeSocialMediaPost(url);
+  let scraped: Awaited<ReturnType<typeof scrapeSocialMediaPost>>;
+  try {
+    scraped = await scrapeSocialMediaPost(url);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[importSocialMedia] scrape failed for ${url}: ${reason}`);
+    return { error: `Could not load post (browser service unavailable): ${reason}` };
+  }
 
   console.log("[importSocialMedia] Scraped result:", {
     description: scraped.description?.substring(0, 100),
