@@ -10,6 +10,18 @@ function config(): { url: string; token: string } {
   return { url, token };
 }
 
+// Tandoor (or a proxy in front of it) answers with HTML on 5xx; surface that
+// as a readable error instead of a JSON parse failure.
+async function readJson(res: Response, what: string): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const snippet = text.replace(/\s+/g, " ").substring(0, 120);
+    throw new Error(`${what}: Tandoor returned non-JSON response (${res.status}): ${snippet}`);
+  }
+}
+
 // POST /api/ai-import/ — parses free text into a recipe (does not save it).
 export async function aiImportText(text: string): Promise<TandoorRecipe> {
   const { url, token } = config();
@@ -27,7 +39,7 @@ export async function aiImportText(text: string): Promise<TandoorRecipe> {
     body: formData,
   });
 
-  const data = await res.json();
+  const data = await readJson(res, "AI import");
   if (!res.ok || data.error || !data.recipe) {
     throw new Error(data.msg || `Tandoor AI import failed (${res.status})`);
   }
@@ -57,7 +69,7 @@ export async function createTandoorRecipe(
     body: JSON.stringify(payload),
   });
 
-  const created = await res.json();
+  const created = await readJson(res, "Create recipe");
   if (!res.ok) {
     throw new Error(
       `Failed to create recipe (${res.status}): ${JSON.stringify(created).substring(0, 200)}`
