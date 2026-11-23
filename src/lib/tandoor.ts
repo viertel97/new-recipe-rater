@@ -46,11 +46,18 @@ export async function aiImportText(text: string): Promise<TandoorRecipe> {
   return data.recipe as TandoorRecipe;
 }
 
+// First non-empty line of a caption, shortened to a usable recipe title.
+export function nameFromText(text: string): string {
+  const line = text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  return line.length > 80 ? `${line.slice(0, 77).trimEnd()}...` : line;
+}
+
 // POST /api/recipe/ — creates the recipe. ai-import only parses, so callers
 // pass either an ai-import result or a JSON-LD-derived TandoorRecipe.
 export async function createTandoorRecipe(
   recipe: TandoorRecipe,
-  sourceUrl: string
+  sourceUrl: string,
+  fallbackName?: string
 ): Promise<{ id: number }> {
   const { url, token } = config();
 
@@ -64,8 +71,12 @@ export async function createTandoorRecipe(
     })),
   }));
 
+  // The AI sometimes returns an empty name, which /api/recipe/ rejects.
+  const name = recipe.name?.trim() || fallbackName?.trim() || "Imported recipe";
+
   const payload = {
     ...recipe,
+    name,
     steps,
     source_url: sourceUrl,
     servings: recipe.servings ?? 1,

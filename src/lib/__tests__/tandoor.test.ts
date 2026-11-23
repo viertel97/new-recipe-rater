@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createTandoorRecipe } from "@/lib/tandoor";
+import { createTandoorRecipe, nameFromText } from "@/lib/tandoor";
 import type { TandoorRecipe } from "@/lib/web-recipe";
 
 describe("createTandoorRecipe", () => {
@@ -45,5 +45,25 @@ describe("createTandoorRecipe", () => {
     await expect(
       createTandoorRecipe({ name: "R", servings: 1, steps: [] }, "http://src")
     ).rejects.toThrow(/non-JSON response \(500\)/);
+  });
+
+  it("uses the fallback name when the recipe name is blank", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 1 }), { status: 201 }));
+    await createTandoorRecipe({ name: "  ", servings: 1, steps: [] }, "http://src", "Caption title");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).name).toBe("Caption title");
+  });
+
+  it("keeps the AI-provided name when present", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 1 }), { status: 201 }));
+    await createTandoorRecipe({ name: "Bolognese", servings: 1, steps: [] }, "http://src", "x");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).name).toBe("Bolognese");
+  });
+});
+
+describe("nameFromText", () => {
+  it("takes the first non-empty line and shortens long ones", () => {
+    expect(nameFromText("\n  Cauliflower Bolognese  \nmore")).toBe("Cauliflower Bolognese");
+    expect(nameFromText("a".repeat(100))).toHaveLength(80);
+    expect(nameFromText("")).toBe("");
   });
 });

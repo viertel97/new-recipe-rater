@@ -8,7 +8,7 @@ import { Rating, Urgency, Category } from "@/generated/prisma/client";
 import { scheduleMediaResolution } from "@/lib/media-resolver";
 import { evictMediaForLink } from "@/lib/media-store";
 import { cleanInstagramDescription } from "@/lib/utils";
-import { aiImportText, createTandoorRecipe, uploadTandoorImage } from "@/lib/tandoor";
+import { aiImportText, createTandoorRecipe, nameFromText, uploadTandoorImage } from "@/lib/tandoor";
 import { createCollectionSchema, COLLECTION_TTL_MS, isExpired, hoursUntil } from "@/lib/collections";
 import type { SharedCollectionView } from "@/types/link";
 
@@ -117,7 +117,7 @@ async function importSocialMediaToTandoor(linkId: string, url: string) {
       stepsCount: recipe.steps?.length,
     });
 
-    const { id } = await createTandoorRecipe(recipe, url);
+    const { id } = await createTandoorRecipe(recipe, url, nameFromText(recipeText));
     console.log("[importSocialMedia] Recipe create response:", { id, name: recipe.name });
 
     await prisma.link.update({
