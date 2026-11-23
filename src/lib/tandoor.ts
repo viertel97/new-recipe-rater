@@ -54,8 +54,19 @@ export async function createTandoorRecipe(
 ): Promise<{ id: number }> {
   const { url, token } = config();
 
+  // ai-import returns order: null on steps/ingredients; /api/recipe/ rejects null.
+  const steps = (recipe.steps ?? []).map((step, si) => ({
+    ...step,
+    order: (step as { order?: number | null }).order ?? si,
+    ingredients: (step.ingredients ?? []).map((ing, ii) => ({
+      ...ing,
+      order: (ing as { order?: number | null }).order ?? ii,
+    })),
+  }));
+
   const payload = {
     ...recipe,
+    steps,
     source_url: sourceUrl,
     servings: recipe.servings ?? 1,
   };
